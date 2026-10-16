@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AuthProvider } from './contexts/AuthContext';
+import { useAuth } from './contexts/useAuth';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
@@ -66,9 +67,9 @@ function App() {
             <Route index element={<Navigate to="/dashboard" />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="documents" element={<Documents />} />
-            <Route path="documents/create" element={<CreateDocument />} />
+            <Route path="documents/create" element={<RoleRoute roles={['SUBMITTER']}><CreateDocument /></RoleRoute>} />
             <Route path="documents/:id" element={<DocumentDetail />} />
-            <Route path="documents/:id/edit" element={<CreateDocument />} />
+            <Route path="documents/:id/edit" element={<RoleRoute roles={['SUBMITTER']}><CreateDocument /></RoleRoute>} />
             <Route path="my-submissions" element={<RoleRoute roles={['SUBMITTER']}><MySubmissions /></RoleRoute>} />
             <Route path="my-approvals" element={<RoleRoute roles={['APPROVER']}><MyApprovals /></RoleRoute>} />
             <Route path="notifications" element={<Notifications />} />

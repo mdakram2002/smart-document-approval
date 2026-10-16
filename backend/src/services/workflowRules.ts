@@ -1,4 +1,4 @@
-import { ApprovalDecision, DocumentStatus } from '@prisma/client';
+import { ApprovalDecision, DocumentStatus } from '@prisma/client-runtime-v2';
 
 export type ApprovalTaskState = {
   actorId: string;

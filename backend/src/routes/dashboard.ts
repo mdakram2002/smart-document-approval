@@ -1,13 +1,40 @@
 import { Router } from 'express';
-import { PrismaClient, DocumentStatus, UserStatus } from '@prisma/client';
+import { Prisma, DocumentStatus, UserStatus } from '@prisma/client-runtime-v2';
 import { authenticate } from '../middleware/auth.js';
 
-const prisma = new PrismaClient();
+import { prisma } from '../db.js';
+import { parseCreatedDateRange } from '../utils/dateFilters.js';
 const router = Router();
 
 router.get('/summary', authenticate, async (req, res, next) => {
   try {
     const { role, id } = req.user!;
+
+    const { status, category, submitterId, from, to } = req.query;
+    const validStatuses = Object.values(DocumentStatus) as string[];
+    if (status && !validStatuses.includes(String(status))) return res.status(400).json({ error: 'Invalid status filter' });
+    if (role === 'ADMIN' && submitterId !== undefined && typeof submitterId !== 'string') return res.status(400).json({ error: 'Invalid submitter filter' });
+    if ((category !== undefined && typeof category !== 'string') || (submitterId !== undefined && role === 'ADMIN' && typeof submitterId !== 'string')) return res.status(400).json({ error: 'Invalid dashboard filter' });
+    const dateRange = parseCreatedDateRange(from, to);
+    if (!dateRange.valid) return res.status(400).json({ error: dateRange.error });
+    const documentWhere: Prisma.DocumentWhereInput = {
+      ...(status && { status: status as DocumentStatus }),
+      ...(typeof category === 'string' && category && { category }),
+      ...(role === 'ADMIN' && typeof submitterId === 'string' && submitterId && { submitterId }),
+      ...(dateRange.valid && dateRange.createdAt && { createdAt: dateRange.createdAt }),
+    };
+
+    const pendingStageTasks = async (approverId?: string) => {
+      const records = await prisma.approvalRecord.findMany({
+        where: {
+          decision: 'PENDING',
+          ...(approverId && { approverId }),
+          workflowInstance: { document: { is: { ...documentWhere, status: DocumentStatus.PENDING_APPROVAL } } },
+        },
+        select: { workflowStage: { select: { stageOrder: true } }, workflowInstance: { select: { document: { select: { currentStage: true } } } } },
+      });
+      return records.filter((record) => record.workflowInstance.document.currentStage === record.workflowStage.stageOrder).length;
+    };
 
     let summary: any = {};
 
@@ -24,14 +51,14 @@ router.get('/summary', authenticate, async (req, res, next) => {
         pendingApprovals,
         recentActivity,
       ] = await Promise.all([
-        prisma.document.count(),
-        prisma.document.count({ where: { status: DocumentStatus.DRAFT } }),
-        prisma.document.count({ where: { status: DocumentStatus.PENDING_APPROVAL } }),
-        prisma.document.count({ where: { status: DocumentStatus.APPROVED } }),
-        prisma.document.count({ where: { status: DocumentStatus.REJECTED } }),
-        prisma.document.count({ where: { status: DocumentStatus.RETURNED_FOR_CHANGES } }),
+        prisma.document.count({ where: documentWhere }),
+        prisma.document.count({ where: { ...documentWhere, status: DocumentStatus.DRAFT } }),
+        prisma.document.count({ where: { ...documentWhere, status: DocumentStatus.PENDING_APPROVAL } }),
+        prisma.document.count({ where: { ...documentWhere, status: DocumentStatus.APPROVED } }),
+        prisma.document.count({ where: { ...documentWhere, status: DocumentStatus.REJECTED } }),
+        prisma.document.count({ where: { ...documentWhere, status: DocumentStatus.RETURNED_FOR_CHANGES } }),
         prisma.user.count({ where: { status: UserStatus.ACTIVE } }),
-        prisma.approvalRecord.count({ where: { decision: 'PENDING' } }),
+        pendingStageTasks(),
         prisma.auditEntry.findMany({
           take: 10,
           orderBy: { timestamp: 'desc' },
@@ -65,24 +92,24 @@ router.get('/summary', authenticate, async (req, res, next) => {
         returnedDocuments,
         recentDocuments,
       ] = await Promise.all([
-        prisma.document.count({ where: { submitterId: id } }),
+        prisma.document.count({ where: { ...documentWhere, submitterId: id } }),
         prisma.document.count({
-          where: { submitterId: id, status: DocumentStatus.DRAFT },
+          where: { ...documentWhere, submitterId: id, status: DocumentStatus.DRAFT },
         }),
         prisma.document.count({
-          where: { submitterId: id, status: DocumentStatus.PENDING_APPROVAL },
+          where: { ...documentWhere, submitterId: id, status: DocumentStatus.PENDING_APPROVAL },
         }),
         prisma.document.count({
-          where: { submitterId: id, status: DocumentStatus.APPROVED },
+          where: { ...documentWhere, submitterId: id, status: DocumentStatus.APPROVED },
         }),
         prisma.document.count({
-          where: { submitterId: id, status: DocumentStatus.REJECTED },
+          where: { ...documentWhere, submitterId: id, status: DocumentStatus.REJECTED },
         }),
         prisma.document.count({
-          where: { submitterId: id, status: DocumentStatus.RETURNED_FOR_CHANGES },
+          where: { ...documentWhere, submitterId: id, status: DocumentStatus.RETURNED_FOR_CHANGES },
         }),
         prisma.document.findMany({
-          where: { submitterId: id },
+          where: { ...documentWhere, submitterId: id },
           take: 5,
           orderBy: { updatedAt: 'desc' },
           include: {
@@ -107,14 +134,12 @@ router.get('/summary', authenticate, async (req, res, next) => {
         completedTasks,
         recentApprovals,
       ] = await Promise.all([
+        pendingStageTasks(id),
         prisma.approvalRecord.count({
-          where: { approverId: id, decision: 'PENDING' },
-        }),
-        prisma.approvalRecord.count({
-          where: { approverId: id, decision: { in: ['APPROVED', 'REJECTED', 'RETURNED'] } },
+          where: { approverId: id, decision: { in: ['APPROVED', 'REJECTED', 'RETURNED'] }, workflowInstance: { document: { is: documentWhere } } },
         }),
         prisma.approvalRecord.findMany({
-          where: { approverId: id },
+          where: { approverId: id, workflowInstance: { document: { is: documentWhere } } },
           take: 5,
           orderBy: { decisionAt: { sort: 'desc', nulls: 'last' } },
           include: {

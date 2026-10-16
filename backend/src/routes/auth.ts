@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { register, login } from '../services/authService.js';
 import { registerSchema, loginSchema } from '../utils/validation.js';
 import { authenticate } from '../middleware/auth.js';
+import { prisma } from '../db.js';
 
 const router = Router();
 
@@ -25,8 +26,19 @@ router.post('/login', async (req, res, next) => {
   }
 });
 
-router.post('/logout', authenticate, (req, res) => {
-  res.json({ message: 'Logged out successfully' });
+router.post('/logout', authenticate, async (req, res, next) => {
+  try {
+    const token = req.accessToken;
+    await prisma.$transaction(async (tx) => {
+      if (token?.jti && token.expiresAt) {
+        await tx.revokedAccessToken.create({ data: { jti: token.jti, userId: req.user!.id, expiresAt: token.expiresAt } });
+      }
+      await tx.auditEntry.create({ data: {
+        actorId: req.user!.id, action: 'LOGOUT', entityType: 'User', entityId: req.user!.id,
+      } });
+    });
+    res.json({ message: 'Logged out successfully' });
+  } catch (error) { next(error); }
 });
 
 router.get('/me', authenticate, (req, res) => {

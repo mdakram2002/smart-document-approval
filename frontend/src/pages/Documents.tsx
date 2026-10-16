@@ -1,19 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../lib/api';
 import type { Document } from '../types';
 import { FileText, Plus, Filter } from 'lucide-react';
+import { useAuth } from '../contexts/useAuth';
 
 const Documents = () => {
+  const { user } = useAuth();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
 
-  useEffect(() => {
-    fetchDocuments();
-  }, [statusFilter]);
-
-  const fetchDocuments = async () => {
+  const fetchDocuments = useCallback(async () => {
     try {
       const params = statusFilter ? { status: statusFilter } : {};
       const response = await api.get('/documents', { params });
@@ -23,7 +21,9 @@ const Documents = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
+
+  useEffect(() => { void fetchDocuments(); }, [fetchDocuments]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -48,13 +48,7 @@ const Documents = () => {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Documents</h1>
-        <Link
-          to="/documents/create"
-          className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          New Document
-        </Link>
+        {user?.role === 'SUBMITTER' && <Link to="/documents/create" className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"><Plus className="w-4 h-4 mr-2" />New Document</Link>}
       </div>
 
       <div className="mb-4 flex items-center space-x-4">

@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import type { Document, ApprovalRecord } from '../types';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 import { 
   ArrowLeft, 
   Send, 
@@ -31,15 +31,25 @@ const DocumentDetail = () => {
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [imagePreviews, setImagePreviews] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    fetchDocument();
+  const fetchDocument = useCallback(async () => {
+    try {
+      const response = await api.get<Document>(`/documents/${id}`);
+      setDocument(response.data);
+    } catch (error) {
+      console.error('Failed to fetch document:', error);
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    void fetchDocument();
+  }, [fetchDocument]);
 
   useEffect(() => {
     if (!document) return;
     let active = true;
     const objectUrls: string[] = [];
-    setImagePreviews({});
     const imageAttachments = document.attachments.filter((attachment) => attachment.mimeType.startsWith('image/'));
 
     imageAttachments.forEach(async (attachment) => {
@@ -60,18 +70,7 @@ const DocumentDetail = () => {
       active = false;
       objectUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
     };
-  }, [document?.id, document?.attachments]);
-
-  const fetchDocument = async () => {
-    try {
-      const response = await api.get<Document>(`/documents/${id}`);
-      setDocument(response.data);
-    } catch (error) {
-      console.error('Failed to fetch document:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [document]);
 
   const handleSubmit = async () => {
     setSubmitting(true);
@@ -191,8 +190,9 @@ const DocumentDetail = () => {
     }
   };
 
-  const canSubmit = document.status === 'DRAFT' || document.status === 'RETURNED_FOR_CHANGES';
-  const canWithdraw = document.status === 'PENDING_APPROVAL';
+  const ownsDocument = user?.id === document.submitterId;
+  const canSubmit = ownsDocument && user?.role === 'SUBMITTER' && (document.status === 'DRAFT' || document.status === 'RETURNED_FOR_CHANGES');
+  const canWithdraw = ownsDocument && user?.role === 'SUBMITTER' && document.status === 'PENDING_APPROVAL';
   const canEdit = document.status === 'DRAFT' || document.status === 'RETURNED_FOR_CHANGES';
   const canManageAttachments = canEdit && (user?.role === 'ADMIN' || user?.id === document.submitterId);
 
@@ -385,7 +385,7 @@ const DocumentDetail = () => {
                 )}
                 {record.decision === 'PENDING' && (
                   <div className="mt-3 space-x-2">
-                    {(user?.role === 'ADMIN' || (user?.role === 'APPROVER' && record.approverId === user.id)) && (
+                    {user?.role === 'APPROVER' && record.approverId === user.id && record.workflowStage.stageOrder === document.currentStage && (
                       <>
                         <button
                           onClick={() => handleApproval(record.id, 'APPROVED')}
@@ -418,6 +418,11 @@ const DocumentDetail = () => {
               </div>
             ))}
           </div>
+          {user?.role === 'APPROVER' && document.status === 'PENDING_APPROVAL' && document.workflowInstance.approvalRecords.some((record) => record.approverId === user.id && record.workflowStage.stageOrder === document.currentStage && record.decision === 'PENDING') && (
+            <label className="mt-5 block text-sm font-medium text-gray-700">Approval comment
+              <textarea value={comment} onChange={(event) => setComment(event.target.value)} rows={3} maxLength={2000} className="mt-1 w-full rounded-md border border-gray-300 p-2" placeholder="Add notes for the submitter or next reviewer" />
+            </label>
+          )}
         </div>
       )}
     </div>

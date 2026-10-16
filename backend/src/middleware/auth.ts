@@ -1,9 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient, UserRole } from '@prisma/client';
+import { UserRole } from '@prisma/client-runtime-v2';
 import jwt, { JwtPayload } from 'jsonwebtoken';
 import { env } from '../utils/env.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../db.js';
 
 export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
@@ -24,6 +23,9 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
   }
 
   try {
+    if (decoded.jti && await prisma.revokedAccessToken.findUnique({ where: { jti: decoded.jti } })) {
+      return res.status(401).json({ error: 'Token has been revoked' });
+    }
     // Read current role and status so an old token cannot retain revoked access.
     const user = await prisma.user.findUnique({
       where: { id: decoded.id as string },
@@ -38,6 +40,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     }
 
     req.user = user;
+    req.accessToken = { jti: decoded.jti, expiresAt: decoded.exp ? new Date(decoded.exp * 1000) : undefined };
     return next();
   } catch (error) {
     return next(error);

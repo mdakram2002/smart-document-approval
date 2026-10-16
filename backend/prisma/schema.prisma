@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../node_modules/@prisma/client-runtime-v2"
 }
 
 datasource db {
@@ -31,6 +32,7 @@ enum ApprovalDecision {
   APPROVED
   REJECTED
   RETURNED
+  CANCELLED
 }
 
 enum NotificationType {
@@ -41,6 +43,7 @@ enum NotificationType {
   DOCUMENT_RESUBMITTED
   DOCUMENT_WITHDRAWN
   WORKFLOW_ASSIGNED
+  APPROVAL_CANCELLED
 }
 
 enum AuditAction {
@@ -81,10 +84,22 @@ model User {
   workflowAssignments WorkflowStageApprover[]
   notifications       Notification[]
   auditEntries        AuditEntry[]            @relation("Actor")
+  revokedAccessTokens RevokedAccessToken[]
 
   @@index([email])
   @@index([role])
   @@index([status])
+}
+
+model RevokedAccessToken {
+  jti       String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+  @@index([userId])
 }
 
 model Document {

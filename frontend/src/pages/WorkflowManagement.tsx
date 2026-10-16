@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import api from '../lib/api';
 import type { WorkflowDefinition } from '../types';
 import type { User } from '../types';
@@ -18,11 +18,7 @@ const WorkflowManagement = () => {
     stages: [{ name: 'Review', approverIds: [''] }],
   });
 
-  useEffect(() => {
-    fetchWorkflows();
-  }, []);
-
-  const fetchWorkflows = async () => {
+  const fetchWorkflows = useCallback(async () => {
     try {
       const response = await api.get('/workflows');
       setWorkflows(response.data);
@@ -33,7 +29,9 @@ const WorkflowManagement = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => { void fetchWorkflows(); }, [fetchWorkflows]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,7 +46,7 @@ const WorkflowManagement = () => {
       setShowCreateForm(false);
       setEditingWorkflowId(null);
       setFormData({ name: '', description: '', category: '', stages: [{ name: 'Review', approverIds: [''] }] });
-      fetchWorkflows();
+      await fetchWorkflows();
     } catch (error: any) {
       setFormError(error.response?.data?.error || 'Failed to save workflow configuration.');
     }
@@ -73,7 +71,7 @@ const WorkflowManagement = () => {
     try {
       const endpoint = currentStatus ? 'deactivate' : 'activate';
       await api.post(`/workflows/${workflowId}/${endpoint}`);
-      fetchWorkflows();
+      await fetchWorkflows();
     } catch (error) {
       console.error('Failed to toggle workflow status:', error);
     }

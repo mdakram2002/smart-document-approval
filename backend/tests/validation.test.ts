@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { registerSchema, createWorkflowSchema, approveRejectSchema, returnForChangesSchema } from '../src/utils/validation.js';
-import { ApprovalDecision, DocumentStatus } from '@prisma/client';
+import { ApprovalDecision, DocumentStatus } from '@prisma/client-runtime-v2';
 import { approvalActionError, resolveApprovalTransition } from '../src/services/workflowRules.js';
 
 test('public registration accepts valid profile data and strips any requested role', () => {

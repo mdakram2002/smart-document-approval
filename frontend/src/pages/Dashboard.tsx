@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useCallback, useEffect, useState } from 'react';
+import type { ComponentType, FormEvent } from 'react';
+import { useAuth } from '../contexts/useAuth';
 import api from '../lib/api';
 import type { DashboardSummary } from '../types';
 import { 
@@ -12,49 +13,55 @@ import {
   TrendingUp
 } from 'lucide-react';
 
+type DashboardFilters = { status: string; category: string; submitterId: string; from: string; to: string };
+const StatCard = ({ icon: Icon, label, value, color }: { icon: ComponentType<{ className?: string }>; label: string; value?: number; color: string }) => (
+  <div className="bg-white rounded-lg shadow p-6">
+    <div className="flex items-center">
+      <div className={`p-3 rounded-lg ${color}`}><Icon className="w-6 h-6 text-white" /></div>
+      <div className="ml-4"><p className="text-sm font-medium text-gray-600">{label}</p><p className="text-2xl font-bold text-gray-900">{value || 0}</p></div>
+    </div>
+  </div>
+);
+
 const Dashboard = () => {
   const { user } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState<DashboardFilters>({ status: '', category: '', submitterId: '', from: '', to: '' });
 
-  useEffect(() => {
-    fetchSummary();
-  }, []);
-
-  const fetchSummary = async () => {
+  const fetchSummary = useCallback(async (event?: FormEvent) => {
+    event?.preventDefault();
+    if (event) setLoading(true);
     try {
-      const response = await api.get<DashboardSummary>('/dashboard/summary');
+      const response = await api.get<DashboardSummary>('/dashboard/summary', { params: Object.fromEntries(Object.entries(filters).filter(([, value]) => value)) });
       setSummary(response.data);
     } catch (error) {
       console.error('Failed to fetch dashboard summary:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters]);
+
+  useEffect(() => { void fetchSummary(); }, [fetchSummary]);
 
   if (loading) {
     return <div className="flex items-center justify-center h-64">Loading...</div>;
   }
-
-  const StatCard = ({ icon: Icon, label, value, color }: any) => (
-    <div className="bg-white rounded-lg shadow p-6">
-      <div className="flex items-center">
-        <div className={`p-3 rounded-lg ${color}`}>
-          <Icon className="w-6 h-6 text-white" />
-        </div>
-        <div className="ml-4">
-          <p className="text-sm font-medium text-gray-600">{label}</p>
-          <p className="text-2xl font-bold text-gray-900">{value || 0}</p>
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-6">
         {user?.role === 'ADMIN' ? 'Admin Dashboard' : user?.role === 'SUBMITTER' ? 'My Dashboard' : 'Approver Dashboard'}
       </h1>
+
+      <form onSubmit={(event) => void fetchSummary(event)} className="mb-6 grid grid-cols-1 gap-3 rounded-lg bg-white p-4 shadow md:grid-cols-3 lg:grid-cols-6">
+        <label className="text-sm text-gray-600">Status<select className="mt-1 w-full rounded border p-2" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}><option value="">All statuses</option><option value="DRAFT">Draft</option><option value="PENDING_APPROVAL">Pending</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option><option value="RETURNED_FOR_CHANGES">Returned</option></select></label>
+        <label className="text-sm text-gray-600">Category<input className="mt-1 w-full rounded border p-2" value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })} /></label>
+        {user?.role === 'ADMIN' && <label className="text-sm text-gray-600">Submitter ID<input className="mt-1 w-full rounded border p-2" value={filters.submitterId} onChange={(e) => setFilters({ ...filters, submitterId: e.target.value })} /></label>}
+        <label className="text-sm text-gray-600">Created from<input type="date" className="mt-1 w-full rounded border p-2" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} /></label>
+        <label className="text-sm text-gray-600">Created to<input type="date" className="mt-1 w-full rounded border p-2" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} /></label>
+        <button className="self-end rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700" type="submit">Apply filters</button>
+      </form>
 
       {user?.role === 'ADMIN' && summary && (
         <>

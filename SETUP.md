@@ -1,126 +1,117 @@
-# Quick Setup Guide
+# Local setup
 
-## Prerequisites
+## Requirements
 
-Make sure you have installed:
-- Node.js (v18 or higher)
-- PostgreSQL (v14 or higher)
-- npm
+- Node.js 20 or later and npm
+- PostgreSQL 14 or later
+- PowerShell on Windows, or a POSIX shell on macOS/Linux
 
-## Initial Setup
+## Install
 
-1. **Clone and navigate to the project**
-```bash
-cd smart-document-approval
-```
-
-2. **Install backend dependencies**
-```bash
+```powershell
+cd C:\Users\hp\GitHub\smart-document-approval
 cd backend
-npm install
+npm ci
+Copy-Item .env.example .env
 ```
 
-3. **Install frontend dependencies**
-```bash
-cd ../frontend
-npm install
-```
+Edit `backend/.env` and set the PostgreSQL connection string, two different random JWT secrets of at least 32 characters, and the initial Admin email, name, and a unique password of at least 12 characters. Keep `.env` private; it is ignored by Git. Do not use the example placeholder values.
 
-4. **Install Playwright browsers**
-```bash
-npx playwright install
-```
+Create the PostgreSQL database named by `DATABASE_URL`, then apply migrations and generate the client:
 
-## Database Setup
-
-1. **Create PostgreSQL database**
-```sql
-CREATE DATABASE smart_document_approval;
-```
-
-2. **Configure backend environment**
-```bash
-cd ../backend
-cp .env.example .env
-```
-
-Edit `.env` with your database credentials (default should work if PostgreSQL is running locally).
-
-3. **Reinstall dependencies (to use stable Prisma version)**
-```bash
-npm install
-```
-
-4. **Run migrations**
-```bash
+```powershell
 npx prisma migrate deploy
+npx prisma generate
 ```
 
-For an existing database created before Prisma migrations were added, baseline its current schema first; `migrate deploy` reports P3005 on a non-empty unbaselined database. Do not reset the database to work around this.
+For an existing database containing the original schema but no migration history, mark only the checked-in baseline as applied before deploying additive migrations:
 
-For a database whose schema matches the original application schema, use the checked-in baseline:
-```bash
+```powershell
 npx prisma migrate resolve --applied 20261015000000_baseline
 npx prisma migrate deploy
 ```
 
-5. **Generate Prisma client**
-```bash
-npx prisma generate
-```
+Do not baseline a fresh or unrelated database. The migrations preserve existing application records.
 
-5. **Seed the database**
-```bash
+## Create the development Admin
+
+After setting `SEED_ADMIN_EMAIL`, `SEED_ADMIN_NAME`, and `SEED_ADMIN_PASSWORD` in `backend/.env`:
+
+```powershell
+cd backend
 npm run prisma:seed
 ```
 
-## Frontend Environment
+The command upserts only that Admin account. Use the same email and password on the existing Login page. Public registration always creates a SUBMITTER; an Admin assigns APPROVER or ADMIN in **Manage Users / Roles**. The seed rejects the `.env.example` placeholders and requires a password of at least 12 characters. Never place production credentials in source files or frontend environment variables; use the deployment secret manager in production.
 
-```bash
-cd ../frontend
-cp .env.example .env
+## Frontend setup
+
+```powershell
+cd ..\frontend
+npm ci
+Copy-Item .env.example .env
+npx playwright install chromium
 ```
 
-The default configuration should work for local development.
+The local frontend default points to `http://localhost:5000/api`.
 
-## Running the Application
+## Run locally
 
-**Terminal 1 - Backend:**
-```bash
+Terminal 1:
+
+```powershell
 cd backend
 npm run dev
 ```
 
-**Note:** If you see TypeScript errors about Prisma types not being found, run:
-```bash
-npx prisma generate
-```
+Terminal 2:
 
-**Terminal 2 - Frontend:**
-```bash
+```powershell
 cd frontend
 npm run dev
 ```
 
-Access the application at http://localhost:5173
+Open `http://localhost:5173` and sign in using the seeded Admin account or a registered user.
 
-## Local accounts
+## Approval workflow
 
-Set `SEED_ADMIN_EMAIL`, `SEED_ADMIN_NAME`, and a unique `SEED_ADMIN_PASSWORD` of at least 12 characters in `backend/.env` before running `npm run prisma:seed`. This non-destructive seed creates only that administrator. Register submitters using the app, then assign the Approver role in User Management.
+1. An Admin opens **Manage Users / Roles** and changes eligible registered users to APPROVER.
+2. The Admin opens **Workflow Configuration & Approver Assignment**, creates ordered stages, and assigns one or more active Approvers to each stage.
+3. A Submitter creates a draft and submits it. The backend chooses the active category workflow (or General fallback), creates a revision, records audit history, and notifies first-stage approvers.
+4. Every approver assigned to the active stage must approve. The backend then activates the next stage and notifies its approvers; future stages cannot act early.
+5. Once every stage approves, the document becomes APPROVED. An approver can instead reject or return it with a required comment. A returned Submitter may edit and resubmit; the new workflow revision preserves the previous decision history.
+6. A Submitter may withdraw a pending document. Remaining tasks are marked CANCELLED, approvers are notified, and the action is audited.
 
-## Running Tests
+Admin can view all documents and audit history, but cannot approve, reject, or return a document. API authorization and ownership checks enforce these rules even when a client bypasses the UI.
 
-```bash
+## Verification commands
+
+```powershell
+cd backend
+npm test
+npm run build
+npx prisma migrate status
+$env:RUN_DB_INTEGRATION_TESTS = 'true'
+npm run test:integration
+```
+
+The database integration suite writes uniquely tagged users, documents, and workflows to the configured database and removes those fixtures afterward. Prefer a disposable test database. Only set `RUN_DB_INTEGRATION_TESTS=true` for a database where this test data is permitted.
+
+```powershell
 cd frontend
+npm run build
+npm run lint
 npm run test:e2e
 ```
 
-## Docker Setup (Alternative)
+Playwright requires Chromium. Tests needing a role account use `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD`, `E2E_SUBMITTER_EMAIL`/`E2E_SUBMITTER_PASSWORD`, or `E2E_APPROVER_EMAIL`/`E2E_APPROVER_PASSWORD`. Browser registration, document-creation, and workflow-configuration tests also require `E2E_ALLOW_DATABASE_WRITES=true`; use that only with a disposable test database.
 
-If you prefer Docker:
+## Docker Compose
 
-```bash
-docker-compose up --build
+For local containers, configure `backend/.env` as above and create a root `.env` with `POSTGRES_PASSWORD` (and optionally `POSTGRES_USER`). Then run:
+
+```powershell
+docker compose up --build
 ```
 
-This will automatically set up PostgreSQL, run migrations, seed the database, and start both services.
+The compose stack runs migrations and the Admin seed. It does not insert demo users or documents. Keep both environment files private.

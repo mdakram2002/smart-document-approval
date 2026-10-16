@@ -22,7 +22,8 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const isAuthenticationRequest = ['/auth/login', '/auth/register'].some((route) => error.config?.url?.endsWith(route));
+    if (error.response?.status === 401 && !isAuthenticationRequest) {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('user');
       window.location.href = '/login';

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../lib/api';
 import type { ApprovalRecord } from '../types';
@@ -7,11 +7,7 @@ const MyApprovals = () => {
   const [approvals, setApprovals] = useState<ApprovalRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchApprovals();
-  }, []);
-
-  const fetchApprovals = async () => {
+  const fetchApprovals = useCallback(async () => {
     try {
       const response = await api.get('/approvals/my-tasks');
       setApprovals(response.data);
@@ -20,7 +16,9 @@ const MyApprovals = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => { void fetchApprovals(); }, [fetchApprovals]);
 
   if (loading) {
     return <div className="flex items-center justify-center h-64">Loading...</div>;

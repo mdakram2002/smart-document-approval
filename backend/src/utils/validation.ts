@@ -53,11 +53,15 @@ export const updateUserSchema = z.object({
   name: z.string().min(2).max(200).optional(),
   role: z.enum(['ADMIN', 'SUBMITTER', 'APPROVER']).optional(),
   status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
-});
+}).strict().refine((value) => Object.keys(value).length > 0, 'At least one user field must be provided');
+
+export const userStatusSchema = z.object({ status: z.enum(['ACTIVE', 'INACTIVE']) }).strict();
 
 export const approveRejectSchema = z.object({
   comment: z.string().min(1, 'Comment is required for rejection'),
 });
+
+export const approveSchema = z.object({ comment: z.string().max(2000).optional() }).strict();
 
 export const returnForChangesSchema = z.object({
   comment: z.string().min(1, 'Comment is required to return for changes'),

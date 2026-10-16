@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../lib/api';
 import type { Document } from '../types';
@@ -16,16 +16,8 @@ const CreateDocument = () => {
   const [fetchLoading, setFetchLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (id) {
-      setSavedDocumentId(id);
-      fetchDocument();
-    } else {
-      setSavedDocumentId(null);
-    }
-  }, [id]);
-
-  const fetchDocument = async () => {
+  const fetchDocument = useCallback(async () => {
+    if (!id) return;
     setFetchLoading(true);
     try {
       const response = await api.get<Document>(`/documents/${id}`);
@@ -38,7 +30,9 @@ const CreateDocument = () => {
     } finally {
       setFetchLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => { if (id) void fetchDocument(); }, [id, fetchDocument]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

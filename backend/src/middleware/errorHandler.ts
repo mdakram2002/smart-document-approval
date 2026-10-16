@@ -56,6 +56,18 @@ export const errorHandler = (
   if (error.message === 'Every assigned user must be an active approver') {
     return res.status(400).json({ error: error.message });
   }
+  if (error.message === 'Cannot remove or deactivate the last active administrator') {
+    return res.status(409).json({ error: error.message });
+  }
+  if (error.message === 'Cannot change an approver with pending workflow tasks') {
+    return res.status(409).json({ error: error.message });
+  }
+  if (error.message === 'A workflow used by documents is immutable. Create a new workflow configuration for future submissions.') {
+    return res.status(409).json({ error: error.message });
+  }
+  if (error.message === 'User not found') {
+    return res.status(404).json({ error: error.message });
+  }
 
   if (error.name === 'UnauthorizedError') {
     return res.status(401).json({ error: 'Unauthorized' });

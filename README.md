@@ -40,7 +40,7 @@ This application enables organizations to:
 - **Authentication & Authorization**: JWT-based authentication with role-based access control (RBAC)
 - **Document Management**: Create, edit, submit, and track documents
 - **Sequential Approval Engine**: Configurable multi-stage approval workflows
-- **Real-time Notifications**: In-app notification system for workflow events
+- **In-app Notifications**: Private notifications for newly assigned approvals and document status changes
 - **Audit Trail**: Complete history of all application events
 - **Role-Specific Dashboards**: Customized views for Admins, Submitters, and Approvers
 - **Secure File Uploads**: Validated attachment handling with size and type restrictions
@@ -138,7 +138,7 @@ smart-document-approval/
 
 ## Prerequisites
 
-- **Node.js** (v18 or higher)
+- **Node.js** (v20 or higher)
 - **PostgreSQL** (v14 or higher)
 - **npm** or **yarn**
 - **Git**
@@ -308,6 +308,7 @@ Sign in at the regular Login page with the configured email and password. The se
 **ApprovalRecords**
 - Records approval decisions at each stage
 - Relationships: WorkflowInstance, WorkflowStage, Approver
+- Includes CANCELLED records for tasks closed by withdrawal, rejection, or return
 
 **Notifications**
 - In-app notifications for users
@@ -316,6 +317,10 @@ Sign in at the regular Login page with the configured email and password. The se
 **AuditEntries**
 - Append-only audit trail of all events
 - Relationships: Actor (User)
+
+**RevokedAccessTokens**
+- Stores access-token IDs invalidated at logout until their expiration
+- Relationships: User (cascade delete)
 
 **Attachments**
 - File attachment metadata
@@ -326,7 +331,7 @@ Sign in at the regular Login page with the configured email and password. The se
 ### Authentication
 
 #### POST /api/auth/register
-Register a new user account (defaults to Submitter role)
+Register a new user account (the backend always creates the SUBMITTER role; any supplied role field is ignored)
 
 **Request:**
 ```json
@@ -424,7 +429,7 @@ List documents with pagination and filters (requires authentication)
 ```
 
 #### POST /api/documents
-Create a new document (requires Submitter or Admin role)
+Create a new document (requires the SUBMITTER role; ownership is assigned by the server)
 
 **Request:**
 ```json
@@ -480,7 +485,7 @@ Get document details (requires authentication and authorization)
 ```
 
 #### PATCH /api/documents/:id
-Update a document (requires owner or Admin role, only for Draft or Returned status)
+Update a document (requires the owning SUBMITTER and Draft or Returned status)
 
 **Request:**
 ```json
@@ -502,7 +507,7 @@ Update a document (requires owner or Admin role, only for Draft or Returned stat
 ```
 
 #### POST /api/documents/:id/submit
-Submit a document for approval (requires owner or Admin role)
+Submit a document for approval (requires the owning SUBMITTER)
 
 **Response:** 200 OK
 ```json
@@ -516,7 +521,7 @@ Submit a document for approval (requires owner or Admin role)
 ```
 
 #### POST /api/documents/:id/withdraw
-Withdraw a document from approval (requires owner or Admin role)
+Withdraw a document from approval (requires the owning SUBMITTER)
 
 **Response:** 200 OK
 ```json
@@ -547,7 +552,7 @@ Get document audit history (requires authentication and authorization)
 ```
 
 #### POST /api/documents/:id/attachments
-Upload an attachment (requires owner or Admin role)
+Upload an attachment (requires the owning SUBMITTER while the document is Draft or Returned)
 
 **Request:** multipart/form-data with file field
 
@@ -565,10 +570,13 @@ Upload an attachment (requires owner or Admin role)
 }
 ```
 
+#### GET /api/documents/:id/attachments/:attachmentId
+Download an attachment for a document the authenticated user may access. Submitters must own the document; Approvers must be assigned to its active workflow revision; Admins may view all documents.
+
 ### Approvals
 
 #### GET /api/approvals/my-tasks
-Get pending approval tasks for the current approver (requires Approver or Admin role)
+Get pending approval tasks for the current approver (requires the APPROVER role; only the active stage is returned)
 
 **Response:** 200 OK
 ```json
@@ -587,8 +595,11 @@ Get pending approval tasks for the current approver (requires Approver or Admin 
 ]
 ```
 
+#### GET /api/approvals/:id
+Get one approval record. The assigned Approver and Admins may view it; only the assigned Approver can make a decision.
+
 #### POST /api/approvals/:id/approve
-Approve a document at the current stage (requires assigned approver or Admin role)
+Approve a document at the current stage (requires the assigned APPROVER; an optional comment is stored)
 
 **Response:** 200 OK
 ```json
@@ -601,7 +612,7 @@ Approve a document at the current stage (requires assigned approver or Admin rol
 ```
 
 #### POST /api/approvals/:id/reject
-Reject a document (requires assigned approver or Admin role)
+Reject a document (requires the assigned APPROVER and a nonempty comment)
 
 **Request:**
 ```json
@@ -622,7 +633,7 @@ Reject a document (requires assigned approver or Admin role)
 ```
 
 #### POST /api/approvals/:id/return
-Return a document for changes (requires assigned approver or Admin role)
+Return a document for changes (requires the assigned APPROVER and a nonempty comment)
 
 **Request:**
 ```json
@@ -701,6 +712,8 @@ Get dashboard statistics (requires authentication)
 }
 ```
 
+`GET /api/dashboard/summary` accepts the `status`, `category`, `submitterId` (Admin only), `from`, and `to` filters. Date bounds apply to document creation time. The dashboard UI sends these filters to the backend counts; the values are database aggregates, not client-side constants.
+
 **Submitter Response:**
 ```json
 {
@@ -741,6 +754,9 @@ List all users (requires Admin role)
   }
 ]
 ```
+
+#### GET /api/users/:id
+Get the authenticated user's profile, or any profile when the caller is an Admin.
 
 #### PATCH /api/users/:id
 Update user details (requires Admin role)
@@ -820,13 +836,30 @@ Create a new workflow (requires Admin role)
     {
       "name": "Manager Review",
       "description": "First approval",
-      "approverId": "uuid"
+      "approverIds": ["approver-user-uuid"]
     },
     {
       "name": "Director Review",
       "description": "Final approval",
-      "approverId": "uuid"
+      "approverIds": ["next-approver-user-uuid"]
     }
+  ]
+}
+```
+
+#### GET /api/workflows/:id
+Get one workflow and its stage assignments (Admin only).
+
+#### PATCH /api/workflows/:id
+Update workflow details or ordered stages and `approverIds` (Admin only). Stage assignments must reference active APPROVER accounts. A workflow used by any document revision is immutable; create a new workflow for future submissions.
+
+**Request example:**
+```json
+{
+  "name": "Finance Approval",
+  "stages": [
+    { "name": "Manager Review", "approverIds": ["approver-user-uuid"] },
+    { "name": "Director Review", "approverIds": ["next-approver-user-uuid"] }
   ]
 }
 ```
@@ -926,7 +959,7 @@ PENDING_APPROVAL
 1. **Draft → Pending Approval**: Document can be submitted when:
    - Status is DRAFT or RETURNED_FOR_CHANGES
    - An active workflow exists for the document's category
-   - The submitter is the document owner or an admin
+   - The current user is the document owner
 
 2. **Pending Approval → Approved**: Document is approved when:
    - All approval stages are completed
@@ -948,10 +981,7 @@ PENDING_APPROVAL
    - A new workflow revision is created
    - Previous approval decisions are preserved for reference
 
-6. **Pending Approval → Draft**: Document can be withdrawn when:
-   - The workflow permits withdrawal
-   - The submitter is the document owner or an admin
-   - The document has not yet been approved
+6. **Pending Approval → Draft**: The owning Submitter can withdraw the document while it is pending. Open approval records are cancelled and assigned approvers are notified.
 
 ## Approval Workflow Design
 
@@ -1042,14 +1072,14 @@ await prisma.$transaction(async (tx) => {
 
 ## Testing
 
-### Running Playwright Tests
+### Automated tests
 
 ```bash
 cd frontend
 npm run test:e2e
 ```
 
-Backend validation and workflow rule tests:
+Backend unit tests:
 
 ```bash
 cd backend
@@ -1057,32 +1087,31 @@ npm test
 npm run build
 ```
 
+The database-backed API test exercises the complete two-stage flow, rejection, return/resubmission, withdrawal, ownership/role checks, duplicate and out-of-order decisions, notification visibility/read state, audit history, logout revocation, and dashboard filters. It creates and removes uniquely tagged records in the configured database; run it only against a development or test database:
+
+```powershell
+cd backend
+$env:RUN_DB_INTEGRATION_TESTS = 'true'
+npm run test:integration
+```
+
+Frontend checks:
+
+```bash
+cd frontend
+npm run build
+npm run lint
+npm run test:e2e
+```
+
+Playwright skips role-specific browser tests when `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD`, `E2E_SUBMITTER_EMAIL`/`E2E_SUBMITTER_PASSWORD`, or `E2E_APPROVER_EMAIL`/`E2E_APPROVER_PASSWORD` are unset. Set `E2E_ALLOW_DATABASE_WRITES=true` only when the backend is connected to a disposable test database; registration, document creation, and workflow-configuration browser tests write data.
+
 ### Test Coverage
 
 The test suite covers:
 
-1. **Authentication**
-   - User registration and login
-   - Invalid credential rejection
-   - Protected route access control
-   - Logout functionality
-
-2. **Authorization**
-   - Role-based page access
-   - Admin-only endpoints
-   - Submitter restrictions
-   - Approver permissions
-
-3. **Document Management**
-   - Document creation
-   - Document viewing
-   - Draft editing
-   - Document filtering
-
-4. **Approval Workflow**
-   - Pending task viewing
-   - Document approval
-   - Approval timeline display
+1. **Backend unit and database integration**: role stripping, workflow validation/transitions, Admin seed/login, role assignment, sequential approvals, final approval, reject/return/resubmit/withdraw, ownership, forbidden and conflicting decisions, notifications, audit records, and dashboard filters.
+2. **Browser tests**: login validation, protected page redirects, and any role workflows with supplied E2E credentials. Role-dependent cases are skipped when their credentials are absent.
 
 ### Test Reports
 
@@ -1109,16 +1138,12 @@ docker-compose down
 docker-compose down -v
 ```
 
-This will start:
+Before starting, prepare `backend/.env` and a root `.env` containing a unique `POSTGRES_PASSWORD`. This starts:
 - PostgreSQL database on port 5432
 - Backend API on port 5000
 - Frontend application on port 5173
 
-The Docker setup automatically:
-- Runs database migrations
-- Generates Prisma client
-- Seeds the database with demo data
-- Starts both frontend and backend servers
+The Docker setup runs migrations, generates Prisma Client, ensures the Admin named in `backend/.env`, and starts the frontend and backend. It does not insert demo users or documents. The JWT secrets and initial Admin credentials come from the ignored `backend/.env`; the database password comes from the ignored root `.env`.
 
 ### Manual Docker Builds
 
@@ -1178,7 +1203,7 @@ npm run preview
 
 2. **File Storage**: Files are stored locally. For production deployment, cloud object storage (AWS S3, etc.) is recommended.
 
-3. **Refresh Tokens**: The refresh token strategy is not utilized in the frontend. A more complete implementation would include refresh and revocation.
+3. **Refresh Tokens**: Refresh tokens are issued but there is no refresh endpoint or refresh-token rotation/revocation flow. Access-token logout revocation is implemented.
 
 4. **Real-time Updates**: The application does not use WebSockets or similar technology for real-time updates. Users must refresh to see new notifications.
 
@@ -1189,10 +1214,10 @@ npm run preview
 ## Current implementation notes (2026-10-16)
 
 - Configure workflow stages with active approver assignments in the Admin Workflow page. Every approver assigned to a stage must approve before the next stage activates. A rejection or return ends that revision. Resubmission creates a new workflow revision and keeps the old decisions. Unused workflow configurations can be edited; workflows already used by documents are immutable, so create a new workflow for future submissions.
-- The schema-only baseline is `backend/prisma/migrations/20261015000000_baseline`; the stage assignment migration is `backend/prisma/migrations/20261016000000_stage_approver_assignments`. Fresh databases can run `npx prisma migrate deploy`. For a pre-existing database with the prior schema, first mark the baseline applied with `npx prisma migrate resolve --applied 20261015000000_baseline`, then run `npx prisma migrate deploy`. The configured local database has been baselined and both migrations verified.
+- The schema-only baseline is `backend/prisma/migrations/20261015000000_baseline`; additive migrations add stage approver assignments, revoked access tokens, and cancelled approval tasks for withdrawn, rejected, or returned workflow revisions. Fresh databases run `npx prisma migrate deploy`. For a pre-existing database with the original schema, mark the baseline applied with `npx prisma migrate resolve --applied 20261015000000_baseline`, then deploy all later migrations. The configured local database was up to date after these migrations.
 - The seed is non-destructive and only ensures an administrator. Copy `backend/.env.example` to `.env`, set unique secrets and `SEED_ADMIN_EMAIL`, `SEED_ADMIN_NAME`, and `SEED_ADMIN_PASSWORD`, then run `npm run prisma:seed`. It will update that email to the configured administrator role and password; it does not create demo users or sample documents.
 - Create Submitter and Approver accounts through public registration (SUBMITTER by default), then have the administrator assign APPROVER using User Management. No demo passwords are provided.
-- Backend unit tests cover registration role stripping, workflow configuration validation, current-task authorization, sequential stage advancement, final approval, rejection, and return rules. Database-backed API integration coverage still needs to be added and run against an isolated test database. Browser tests require Playwright Chromium and `E2E_ADMIN_*`, `E2E_SUBMITTER_*`, or `E2E_APPROVER_*` credentials; set `E2E_ALLOW_DATABASE_WRITES=true` only when the backend points at an isolated test database.
+- Backend unit tests and the opt-in PostgreSQL API integration test are in `backend/tests`. The integration test requires `RUN_DB_INTEGRATION_TESTS=true` and cleans up its uniquely tagged records; use a test database when available. Browser role checks require the `E2E_*` credentials described above. The login page is shared; role comes from `/api/auth/me` and backend authorization remains authoritative.
 
 ## Future Improvements
 

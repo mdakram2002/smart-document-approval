@@ -5,8 +5,8 @@ services:
     image: postgres:14-alpine
     container_name: smart-doc-postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the root .env file}
       POSTGRES_DB: smart_document_approval
     ports:
       - "5432:5432"
@@ -25,24 +25,16 @@ services:
     container_name: smart-doc-backend
     ports:
       - "5000:5000"
+    env_file:
+      - ./backend/.env
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/smart_document_approval?schema=public
-      JWT_ACCESS_SECRET: dev-access-secret-key-min-32-chars-long
-      JWT_REFRESH_SECRET: dev-refresh-secret-key-min-32-chars-long
-      ACCESS_TOKEN_EXPIRES_IN: 15m
-      REFRESH_TOKEN_EXPIRES_IN: 7d
-      PORT: 5000
-      NODE_ENV: development
-      FRONTEND_URL: http://localhost:5173
-      UPLOAD_DIR: ./uploads
-      MAX_FILE_SIZE: 5242880
-      CORS_ORIGIN: http://localhost:5173
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the root .env file}@postgres:5432/smart_document_approval?schema=public
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - ./backend/uploads:/app/uploads
-    command: sh -c "npx prisma migrate dev && npx prisma generate && npm run prisma:seed && npm run dev"
+    command: sh -c "npx prisma migrate deploy && npx prisma generate && npm run prisma:seed && npm run dev"
 
   frontend:
     build:

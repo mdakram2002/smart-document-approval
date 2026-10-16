@@ -43,7 +43,7 @@ test.describe('Authentication', () => {
 
   test('user can logout', async ({ page }) => {
     await signInAs(page, 'SUBMITTER');
-    await page.click('button:has-text("Logout")');
+    await page.getByRole('button', { name: 'Logout' }).click();
     
     await expect(page).toHaveURL('/login');
   });

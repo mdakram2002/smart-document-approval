@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 import api from '../lib/api';
 import type { Document } from '../types';
 
@@ -9,11 +9,7 @@ const MySubmissions = () => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchDocuments();
-  }, []);
-
-  const fetchDocuments = async () => {
+  const fetchDocuments = useCallback(async () => {
     try {
       const response = await api.get('/documents', {
         params: { submitterId: user?.id }
@@ -24,7 +20,9 @@ const MySubmissions = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
+
+  useEffect(() => { void fetchDocuments(); }, [fetchDocuments]);
 
   const getStatusColor = (status: string) => {
     switch (status) {

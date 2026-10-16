@@ -46,8 +46,10 @@ app.get('/health', (req, res) => {
 app.use(errorHandler);
 
 const PORT = env.PORT;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT} in ${env.NODE_ENV} mode`);
-});
+if (env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT} in ${env.NODE_ENV} mode`);
+  });
+}
 
 export default app;

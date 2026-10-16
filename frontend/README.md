@@ -1,32 +1,7 @@
-# React + TypeScript + Vite
+# Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+This React application uses the backend API at `VITE_API_URL` (default: `http://localhost:5000/api`). Copy `.env.example` to `.env` to override it for local development.
 
-Currently, two official plugins are available:
+Run the development server with `npm run dev`. Use `npm run build` for a production build, `npm run lint` for Oxlint, and `npm run test:e2e` for Playwright browser tests.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Role-specific browser tests use `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD`, `E2E_SUBMITTER_EMAIL`/`E2E_SUBMITTER_PASSWORD`, and `E2E_APPROVER_EMAIL`/`E2E_APPROVER_PASSWORD`. Database-writing browser tests are opt-in through `E2E_ALLOW_DATABASE_WRITES=true` and should only run against a disposable test database. See the repository [SETUP.md](../SETUP.md) for Admin setup, database migrations, and the complete workflow.

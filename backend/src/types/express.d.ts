@@ -1,4 +1,4 @@
-import { UserRole } from '@prisma/client';
+import { UserRole } from '@prisma/client-runtime-v2';
 
 declare global {
   namespace Express {
@@ -10,6 +10,7 @@ declare global {
         role: UserRole;
         status: string;
       };
+      accessToken?: { jti?: string; expiresAt?: Date };
     }
   }
 }

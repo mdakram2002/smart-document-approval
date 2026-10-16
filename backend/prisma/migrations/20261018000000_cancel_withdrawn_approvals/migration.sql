@@ -1,0 +1,1 @@
+ALTER TYPE "ApprovalDecision" ADD VALUE 'CANCELLED';

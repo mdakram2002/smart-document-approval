@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { PrismaClient, DocumentStatus } from '@prisma/client';
+import { DocumentStatus } from '@prisma/client-runtime-v2';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { createDocumentSchema, updateDocumentSchema } from '../utils/validation.js';
 import multer from 'multer';
@@ -8,7 +8,8 @@ import { mkdir, unlink, writeFile } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { env } from '../utils/env.js';
 
-const prisma = new PrismaClient();
+import { prisma } from '../db.js';
+import { parseCreatedDateRange } from '../utils/dateFilters.js';
 const router = Router();
 
 const allowedMimeTypes: Record<string, string[]> = {
@@ -51,6 +52,8 @@ router.get('/', authenticate, async (req, res, next) => {
     if (!Number.isInteger(pageNum) || pageNum < 1 || !Number.isInteger(limitNum) || limitNum < 1 || limitNum > 100) {
       return res.status(400).json({ error: 'page must be positive and limit must be between 1 and 100' });
     }
+    if (status && !Object.values(DocumentStatus).includes(String(status) as DocumentStatus)) return res.status(400).json({ error: 'Invalid document status' });
+    if (status && typeof status !== 'string' || category && typeof category !== 'string' || submitterId && typeof submitterId !== 'string') return res.status(400).json({ error: 'Invalid document filter' });
 
     if (req.user!.role === 'SUBMITTER') {
       where.submitterId = req.user!.id;
@@ -70,13 +73,9 @@ router.get('/', authenticate, async (req, res, next) => {
 
     if (status) where.status = status;
     if (category) where.category = category;
-    if (from || to) {
-      const fromDate = from ? new Date(String(from)) : undefined;
-      const toDate = to ? new Date(String(to)) : undefined;
-      if ((fromDate && Number.isNaN(fromDate.getTime())) || (toDate && Number.isNaN(toDate.getTime()))) return res.status(400).json({ error: 'Invalid date filter' });
-      if (fromDate && toDate && fromDate > toDate) return res.status(400).json({ error: 'from must be before to' });
-      where.createdAt = { ...(fromDate && { gte: fromDate }), ...(toDate && { lte: toDate }) };
-    }
+    const dateRange = parseCreatedDateRange(from, to);
+    if (!dateRange.valid) return res.status(400).json({ error: dateRange.error });
+    if (dateRange.valid && dateRange.createdAt) where.createdAt = dateRange.createdAt;
     if (submitterId && req.user!.role === 'ADMIN') where.submitterId = submitterId;
 
     const [documents, total] = await Promise.all([
@@ -172,7 +171,7 @@ router.get('/:id', authenticate, async (req, res, next) => {
   }
 });
 
-router.post('/', authenticate, authorize('SUBMITTER', 'ADMIN'), async (req, res, next) => {
+router.post('/', authenticate, authorize('SUBMITTER'), async (req, res, next) => {
   try {
     const validatedData = createDocumentSchema.parse(req.body);
     const document = await prisma.$transaction(async (tx) => {
@@ -211,7 +210,7 @@ router.patch('/:id', authenticate, async (req, res, next) => {
     }
 
     // Only owner or admin can edit
-    if (document.submitterId !== req.user!.id && req.user!.role !== 'ADMIN') {
+    if (document.submitterId !== req.user!.id) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
@@ -233,7 +232,7 @@ router.patch('/:id', authenticate, async (req, res, next) => {
   }
 });
 
-router.post('/:id/submit', authenticate, async (req, res, next) => {
+router.post('/:id/submit', authenticate, authorize('SUBMITTER'), async (req, res, next) => {
   try {
     const id = req.params.id as string;
 
@@ -246,7 +245,7 @@ router.post('/:id/submit', authenticate, async (req, res, next) => {
       return res.status(400).json({ error: 'Document is not in a submittable state' });
     }
 
-    if (document.submitterId !== req.user!.id && req.user!.role !== 'ADMIN') {
+    if (document.submitterId !== req.user!.id) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
@@ -334,7 +333,7 @@ router.post('/:id/submit', authenticate, async (req, res, next) => {
   }
 });
 
-router.post('/:id/withdraw', authenticate, async (req, res, next) => {
+router.post('/:id/withdraw', authenticate, authorize('SUBMITTER'), async (req, res, next) => {
   try {
     const id = req.params.id as string;
 
@@ -347,7 +346,7 @@ router.post('/:id/withdraw', authenticate, async (req, res, next) => {
       return res.status(400).json({ error: 'Document cannot be withdrawn in current status' });
     }
 
-    if (document.submitterId !== req.user!.id && req.user!.role !== 'ADMIN') {
+    if (document.submitterId !== req.user!.id) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
@@ -362,6 +361,10 @@ router.post('/:id/withdraw', authenticate, async (req, res, next) => {
       const pendingApprovers = await tx.approvalRecord.findMany({
         where: { workflowInstanceId: document.workflowInstanceId, decision: 'PENDING' },
         select: { approverId: true },
+      });
+      await tx.approvalRecord.updateMany({
+        where: { workflowInstanceId: document.workflowInstanceId, decision: 'PENDING' },
+        data: { decision: 'CANCELLED', comment: 'Document withdrawn by submitter', decisionAt: now },
       });
       await tx.workflowInstance.update({ where: { id: document.workflowInstanceId }, data: { completedAt: now } });
       await tx.notification.createMany({
@@ -441,7 +444,7 @@ router.post('/:id/attachments', authenticate, upload.single('file'), async (req,
       return res.status(404).json({ error: 'Document not found' });
     }
 
-    if (document.submitterId !== req.user!.id && req.user!.role !== 'ADMIN') {
+    if (document.submitterId !== req.user!.id) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 

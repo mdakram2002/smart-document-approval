@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import api from '../lib/api';
 import type { Notification } from '../types';
 import { Bell, Check, CheckCheck } from 'lucide-react';
@@ -8,11 +8,7 @@ const Notifications = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchNotifications();
-  }, []);
-
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     try {
       const response = await api.get('/notifications');
       setNotifications(response.data.notifications);
@@ -22,12 +18,14 @@ const Notifications = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => { void fetchNotifications(); }, [fetchNotifications]);
 
   const markAsRead = async (id: string) => {
     try {
       await api.patch(`/notifications/${id}/read`);
-      fetchNotifications();
+      await fetchNotifications();
     } catch (error) {
       console.error('Failed to mark notification as read:', error);
     }
@@ -36,7 +34,7 @@ const Notifications = () => {
   const markAllAsRead = async () => {
     try {
       await api.post('/notifications/read-all');
-      fetchNotifications();
+      await fetchNotifications();
     } catch (error) {
       console.error('Failed to mark all notifications as read:', error);
     }

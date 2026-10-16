@@ -1,9 +1,8 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { createWorkflowSchema, updateWorkflowSchema } from '../utils/validation.js';
 
-const prisma = new PrismaClient();
+import { prisma } from '../db.js';
 const router = Router();
 
 router.get('/', authenticate, authorize('ADMIN'), async (req, res, next) => {
@@ -119,11 +118,13 @@ router.patch('/:id', authenticate, authorize('ADMIN'), async (req, res, next) =>
     const validatedData = updateWorkflowSchema.parse(req.body);
     const current = await prisma.workflowDefinition.findUnique({ where: { id }, include: { _count: { select: { instances: true } } } });
     if (!current) return res.status(404).json({ error: 'Workflow not found' });
-    if (validatedData.stages && current._count.instances > 0) {
+    if (current._count.instances > 0) {
       return res.status(409).json({ error: 'A workflow used by documents is immutable. Create a new workflow configuration for future submissions.' });
     }
     const { stages, ...workflowFields } = validatedData;
     const workflow = await prisma.$transaction(async (tx) => {
+      const instanceCount = await tx.workflowInstance.count({ where: { workflowDefinitionId: id } });
+      if (instanceCount > 0) throw new Error('A workflow used by documents is immutable. Create a new workflow configuration for future submissions.');
       if (stages) {
         const approverIds = [...new Set(stages.flatMap((stage) => stage.approverIds))];
         const approvers = await tx.user.findMany({ where: { id: { in: approverIds }, role: 'APPROVER', status: 'ACTIVE' }, select: { id: true } });

@@ -1,35 +1,43 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import api from '../lib/api';
 import type { User } from '../types';
 import { UserCheck, UserX } from 'lucide-react';
 
 const UserManagement = () => {
   const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       const response = await api.get('/users');
       setUsers(response.data);
     } catch (error) {
       console.error('Failed to fetch users:', error);
-    } finally {
-      setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => { void fetchUsers(); }, [fetchUsers]);
 
   const toggleUserStatus = async (userId: string, currentStatus: string) => {
     try {
+      setError('');
       await api.patch(`/users/${userId}/status`, {
         status: currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
       });
-      fetchUsers();
-    } catch (error) {
-      console.error('Failed to update user status:', error);
+      await fetchUsers();
+    } catch (error: any) {
+      setError(error.response?.data?.error || 'Failed to update user status.');
+    }
+  };
+
+  const changeRole = async (userId: string, role: User['role']) => {
+    try {
+      setError('');
+      await api.patch(`/users/${userId}`, { role });
+      await fetchUsers();
+    } catch (error: any) {
+      setError(error.response?.data?.error || 'Failed to update user role.');
+      await fetchUsers();
     }
   };
 
@@ -50,13 +58,10 @@ const UserManagement = () => {
     return status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
   };
 
-  if (loading) {
-    return <div className="flex items-center justify-center h-64">Loading...</div>;
-  }
-
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-6">User Management</h1>
+      {error && <p role="alert" className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
@@ -105,6 +110,11 @@ const UserManagement = () => {
                   {new Date(user.createdAt).toLocaleDateString()}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <select aria-label={`Role for ${user.name}`} value={user.role} onChange={(event) => void changeRole(user.id, event.target.value as User['role'])} className="mr-3 rounded border border-gray-300 px-2 py-1">
+                    <option value="SUBMITTER">Submitter</option>
+                    <option value="APPROVER">Approver</option>
+                    <option value="ADMIN">Admin</option>
+                  </select>
                   <button
                     onClick={() => toggleUserStatus(user.id, user.status)}
                     className="text-blue-600 hover:text-blue-900"

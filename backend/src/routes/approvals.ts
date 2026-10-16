@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { PrismaClient, ApprovalDecision, DocumentStatus } from '@prisma/client';
+import { ApprovalDecision, DocumentStatus } from '@prisma/client-runtime-v2';
 import { authenticate, authorize } from '../middleware/auth.js';
-import { approveRejectSchema, returnForChangesSchema } from '../utils/validation.js';
+import { approveSchema, approveRejectSchema, returnForChangesSchema } from '../utils/validation.js';
 import { approvalActionError, resolveApprovalTransition } from '../services/workflowRules.js';
 
-const prisma = new PrismaClient();
+import { prisma } from '../db.js';
 const router = Router();
 
 router.get('/my-tasks', authenticate, authorize('APPROVER'), async (req, res, next) => {
@@ -79,6 +79,16 @@ async function decide(req: any, res: any, next: any, decision: ApprovalDecision,
       if (ended && decision !== ApprovalDecision.APPROVED) await tx.workflowInstance.update({ where: { id: task.workflowInstanceId }, data: { completedAt: now } });
       if (nextStatus === DocumentStatus.APPROVED) await tx.workflowInstance.update({ where: { id: task.workflowInstanceId }, data: { completedAt: now } });
 
+      if (decision === ApprovalDecision.REJECTED || decision === ApprovalDecision.RETURNED) {
+        const remainingTasks = await tx.approvalRecord.findMany({ where: { workflowInstanceId: task.workflowInstanceId, decision: 'PENDING' }, select: { approverId: true } });
+        await tx.approvalRecord.updateMany({ where: { workflowInstanceId: task.workflowInstanceId, decision: 'PENDING' }, data: { decision: 'CANCELLED', comment: `Workflow ended: ${decision.toLowerCase()}`, decisionAt: now } });
+        const recipients = [...new Set(remainingTasks.map(({ approverId }) => approverId))];
+        if (recipients.length) await tx.notification.createMany({ data: recipients.map((recipientId) => ({
+          recipientId, type: 'APPROVAL_CANCELLED' as const, title: 'Approval task cancelled',
+          message: `${doc.title} no longer requires your approval because it was ${decision.toLowerCase()}.`, documentId: doc.id,
+        })) });
+      }
+
       const action = decision === ApprovalDecision.APPROVED ? 'DOCUMENT_APPROVED' : decision === ApprovalDecision.REJECTED ? 'DOCUMENT_REJECTED' : 'DOCUMENT_RETURNED';
       await tx.auditEntry.create({ data: { actorId: req.user!.id, action, entityType: 'Document', entityId: doc.id, previousState: JSON.stringify(previous), newState: JSON.stringify({ status: nextStatus, currentStage: nextStage }), metadata: JSON.stringify({ taskId: id, stageId: task.workflowStageId, comment }) } });
 
@@ -95,7 +105,9 @@ async function decide(req: any, res: any, next: any, decision: ApprovalDecision,
   } catch (error) { next(error); }
 }
 
-router.post('/:id/approve', authenticate, authorize('APPROVER'), (req, res, next) => decide(req, res, next, ApprovalDecision.APPROVED, null));
+router.post('/:id/approve', authenticate, authorize('APPROVER'), (req, res, next) => {
+  try { const { comment } = approveSchema.parse(req.body ?? {}); return decide(req, res, next, ApprovalDecision.APPROVED, comment?.trim() || null); } catch (error) { next(error); }
+});
 router.post('/:id/reject', authenticate, authorize('APPROVER'), (req, res, next) => {
   try { const { comment } = approveRejectSchema.parse(req.body); return decide(req, res, next, ApprovalDecision.REJECTED, comment); } catch (error) { next(error); }
 });
