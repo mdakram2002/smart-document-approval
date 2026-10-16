@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/useAuth';
 import api from '../lib/api';
@@ -6,23 +6,19 @@ import type { Document } from '../types';
 
 const MySubmissions = () => {
   const { user } = useAuth();
+  const userId = user?.id;
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchDocuments = useCallback(async () => {
-    try {
-      const response = await api.get('/documents', {
-        params: { submitterId: user?.id }
-      });
-      setDocuments(response.data.documents);
-    } catch (error) {
-      console.error('Failed to fetch documents:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id]);
-
-  useEffect(() => { void fetchDocuments(); }, [fetchDocuments]);
+  useEffect(() => {
+    if (!userId) return;
+    let active = true;
+    api.get('/documents', { params: { submitterId: userId } })
+      .then((response) => { if (active) setDocuments(response.data.documents); })
+      .catch((error) => console.error('Failed to fetch documents:', error))
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [userId]);
 
   const getStatusColor = (status: string) => {
     switch (status) {

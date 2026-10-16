@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import api from '../lib/api';
 import type { AuditEntry } from '../types';
 import { History } from 'lucide-react';
@@ -7,18 +7,14 @@ const AuditHistory = () => {
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchAuditEntries = useCallback(async () => {
-    try {
-      const response = await api.get('/audit-logs');
-      setAuditEntries(response.data.auditEntries);
-    } catch (error) {
-      console.error('Failed to fetch audit entries:', error);
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    let active = true;
+    api.get('/audit-logs')
+      .then((response) => { if (active) setAuditEntries(response.data.auditEntries); })
+      .catch((error) => console.error('Failed to fetch audit entries:', error))
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, []);
-
-  useEffect(() => { void fetchAuditEntries(); }, [fetchAuditEntries]);
 
   if (loading) {
     return <div className="flex items-center justify-center h-64">Loading...</div>;

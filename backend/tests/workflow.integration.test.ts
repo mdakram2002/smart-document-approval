@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
+import { unlink } from 'node:fs/promises';
 
 process.env.NODE_ENV = 'test';
 
@@ -59,6 +60,9 @@ test('database-backed auth, workflow, permissions, filters, notifications, audit
 
     const adminSession = await login(adminEmail, testPassword);
     assert.equal(adminSession.user.role, 'ADMIN');
+    expectStatus(await call('/auth/login', undefined, { method: 'POST', body: JSON.stringify({ email: adminEmail, password: 'incorrect-password' }) }), 401);
+    expectStatus(await call('/documents'), 401);
+    expectStatus(await call('/auth/register', undefined, { method: 'POST', body: JSON.stringify({ email: 'bad-email', password: 'weak', name: 'Invalid' }) }), 400);
     const submitter = await register(email('submitter'), 'Test Submitter');
     const approver1 = await register(email('approver1'), 'Test Approver One');
     const approver2 = await register(email('approver2'), 'Test Approver Two');
@@ -78,6 +82,7 @@ test('database-backed auth, workflow, permissions, filters, notifications, audit
     expectStatus(await call('/documents', adminSession.accessToken, { method: 'POST', body: JSON.stringify({ title: 'Admin must not submit', description: 'Not a submitter action', category: 'Integration' }) }), 403);
     const badWorkflow = await call('/workflows', adminSession.accessToken, { method: 'POST', body: JSON.stringify({ name: 'Must fail', category: 'Integration', stages: [{ name: 'Only stage', approverIds: [inactiveApprover.id] }] }) });
     expectStatus(badWorkflow, 400);
+    assert.equal(await prisma.workflowDefinition.findFirst({ where: { name: 'Must fail' } }), null, 'invalid workflow transaction must roll back');
     const createdWorkflow = await call('/workflows', adminSession.accessToken, { method: 'POST', body: JSON.stringify({ name: 'Integration two stage', category: 'Integration', stages: [{ name: 'Manager review', approverIds: [approver1.id] }, { name: 'Director review', approverIds: [approver2.id] }] }) });
     expectStatus(createdWorkflow, 201);
     workflowIds.push(createdWorkflow.body.id);
@@ -89,6 +94,8 @@ test('database-backed auth, workflow, permissions, filters, notifications, audit
       documentIds.push(result.body.id);
       return result.body as { id: string; status: string };
     };
+    expectStatus(await call('/documents', submitterSession.accessToken, { method: 'POST', body: JSON.stringify({ description: 'Missing title and category' }) }), 400);
+    expectStatus(await call(`/documents/${randomUUID()}`, submitterSession.accessToken), 404);
     const submit = async (documentId: string) => expectStatus(await call(`/documents/${documentId}/submit`, submitterSession.accessToken, { method: 'POST' }), 200);
     const recordsFor = async (documentId: string) => {
       const document = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
@@ -99,6 +106,22 @@ test('database-backed auth, workflow, permissions, filters, notifications, audit
     const draftEdit = await call(`/documents/${sequentialDoc.id}`, submitterSession.accessToken, { method: 'PATCH', body: JSON.stringify({ description: 'Edited before submission' }) });
     expectStatus(draftEdit, 200);
     assert.equal(draftEdit.body.version, 2);
+    const uploadForm = new FormData();
+    uploadForm.append('file', new Blob(['integration attachment'], { type: 'text/plain' }), `attachment-${tag}.txt`);
+    const unsupportedForm = new FormData();
+    unsupportedForm.append('file', new Blob(['not a supported document'], { type: 'application/octet-stream' }), `unsupported-${tag}.exe`);
+    const unsupportedUpload = await fetch(`${baseUrl}/api/documents/${sequentialDoc.id}/attachments`, { method: 'POST', headers: { authorization: `Bearer ${submitterSession.accessToken}` }, body: unsupportedForm });
+    assert.equal(unsupportedUpload.status, 400);
+    const uploadResponse = await fetch(`${baseUrl}/api/documents/${sequentialDoc.id}/attachments`, { method: 'POST', headers: { authorization: `Bearer ${submitterSession.accessToken}` }, body: uploadForm });
+    const uploadedAttachment = await uploadResponse.json();
+    assert.equal(uploadResponse.status, 201, JSON.stringify(uploadedAttachment));
+    assert.equal(uploadedAttachment.originalName, `attachment-${tag}.txt`);
+    assert.equal(Object.hasOwn(uploadedAttachment, 'path'), false, 'server filesystem path must not be returned');
+    const downloadResponse = await fetch(`${baseUrl}/api/documents/${sequentialDoc.id}/attachments/${uploadedAttachment.id}`, { headers: { authorization: `Bearer ${submitterSession.accessToken}` } });
+    assert.equal(downloadResponse.status, 200);
+    assert.equal(await downloadResponse.text(), 'integration attachment');
+    const unauthorizedDownload = await fetch(`${baseUrl}/api/documents/${sequentialDoc.id}/attachments/${uploadedAttachment.id}`, { headers: { authorization: `Bearer ${outsiderSession.accessToken}` } });
+    assert.equal(unauthorizedDownload.status, 403);
     await submit(sequentialDoc.id);
     expectStatus(await call(`/workflows/${createdWorkflow.body.id}`, adminSession.accessToken, { method: 'PATCH', body: JSON.stringify({ stages: [{ name: 'Changed after use', approverIds: [approver1.id] }] }) }), 409);
     expectStatus(await call(`/users/${approver2.id}/status`, adminSession.accessToken, { method: 'PATCH', body: JSON.stringify({ status: 'INACTIVE' }) }), 409);
@@ -116,7 +139,12 @@ test('database-backed auth, workflow, permissions, filters, notifications, audit
     expectStatus(await call(`/approvals/${firstTask.id}/approve`, approver2Session.accessToken, { method: 'POST', body: JSON.stringify({ comment: 'Wrong actor' }) }), 403);
     expectStatus(await call(`/approvals/${firstTask.id}/approve`, adminSession.accessToken, { method: 'POST', body: JSON.stringify({ comment: 'Admin cannot approve' }) }), 403);
     expectStatus(await call(`/approvals/${secondTask.id}/approve`, approver2Session.accessToken, { method: 'POST', body: JSON.stringify({ comment: 'Out of order' }) }), 409);
-    expectStatus(await call(`/approvals/${firstTask.id}/approve`, approver1Session.accessToken, { method: 'POST', body: JSON.stringify({ comment: 'Looks good for stage two' }) }), 200);
+    const simultaneousDecisions = await Promise.all([
+      call(`/approvals/${firstTask.id}/approve`, approver1Session.accessToken, { method: 'POST', body: JSON.stringify({ comment: 'Looks good for stage two' }) }),
+      call(`/approvals/${firstTask.id}/approve`, approver1Session.accessToken, { method: 'POST', body: JSON.stringify({ comment: 'Conflicting duplicate action' }) }),
+    ]);
+    assert.deepEqual(simultaneousDecisions.map(({ status }) => status).sort(), [200, 409]);
+    const acceptedDecision = simultaneousDecisions.find(({ status }) => status === 200)!;
     expectStatus(await call(`/approvals/${firstTask.id}/approve`, approver1Session.accessToken, { method: 'POST', body: JSON.stringify({ comment: 'Duplicate' }) }), 409);
     assert.equal((await prisma.document.findUniqueOrThrow({ where: { id: sequentialDoc.id } })).currentStage, 2);
     assert.ok((await call('/notifications', approver2Session.accessToken)).body.notifications.some((notification: any) => notification.documentId === sequentialDoc.id));
@@ -125,7 +153,7 @@ test('database-backed auth, workflow, permissions, filters, notifications, audit
     assert.ok((await call('/notifications', submitterSession.accessToken)).body.notifications.some((notification: any) => notification.documentId === sequentialDoc.id && notification.type === 'DOCUMENT_APPROVED'));
     const history = await call(`/documents/${sequentialDoc.id}/history`, submitterSession.accessToken);
     assert.ok(history.body.some((entry: any) => entry.action === 'DOCUMENT_SUBMITTED'));
-    assert.ok(history.body.some((entry: any) => entry.action === 'DOCUMENT_APPROVED' && entry.metadata?.includes('Looks good for stage two')));
+    assert.ok(history.body.some((entry: any) => entry.action === 'DOCUMENT_APPROVED' && entry.metadata?.includes(acceptedDecision.body.comment)));
 
     const rejectedDoc = await createDocument('Rejected');
     await submit(rejectedDoc.id);
@@ -200,6 +228,8 @@ test('database-backed auth, workflow, permissions, filters, notifications, audit
   } finally {
     if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
     if (userIds.length) {
+      const attachmentFiles = await prisma.attachment.findMany({ where: { documentId: { in: documentIds } }, select: { path: true } });
+      await Promise.all(attachmentFiles.map(({ path }) => unlink(path).catch(() => undefined)));
       await prisma.$transaction(async (tx) => {
         await tx.notification.deleteMany({ where: { OR: [{ recipientId: { in: userIds } }, { documentId: { in: documentIds } }] } });
         await tx.auditEntry.deleteMany({ where: { OR: [{ actorId: { in: userIds } }, { entityId: { in: [...documentIds, ...workflowIds] } }] } });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../lib/api';
 import type { Document } from '../types';
@@ -11,19 +11,15 @@ const Documents = () => {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
 
-  const fetchDocuments = useCallback(async () => {
-    try {
-      const params = statusFilter ? { status: statusFilter } : {};
-      const response = await api.get('/documents', { params });
-      setDocuments(response.data.documents);
-    } catch (error) {
-      console.error('Failed to fetch documents:', error);
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    let active = true;
+    const params = statusFilter ? { status: statusFilter } : {};
+    api.get('/documents', { params })
+      .then((response) => { if (active) setDocuments(response.data.documents); })
+      .catch((error) => console.error('Failed to fetch documents:', error))
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [statusFilter]);
-
-  useEffect(() => { void fetchDocuments(); }, [fetchDocuments]);
 
   const getStatusColor = (status: string) => {
     switch (status) {

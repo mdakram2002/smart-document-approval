@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../lib/api';
 import type { Document } from '../types';
@@ -13,26 +13,23 @@ const CreateDocument = () => {
   const [attachments, setAttachments] = useState<File[]>([]);
   const [savedDocumentId, setSavedDocumentId] = useState<string | null>(id ?? null);
   const [loading, setLoading] = useState(false);
-  const [fetchLoading, setFetchLoading] = useState(false);
+  const [fetchLoading, setFetchLoading] = useState(Boolean(id));
   const [error, setError] = useState('');
 
-  const fetchDocument = useCallback(async () => {
+  useEffect(() => {
     if (!id) return;
-    setFetchLoading(true);
-    try {
-      const response = await api.get<Document>(`/documents/${id}`);
-      const doc = response.data;
-      setTitle(doc.title);
-      setDescription(doc.description);
-      setCategory(doc.category);
-    } catch (error) {
-      console.error('Failed to fetch document:', error);
-    } finally {
-      setFetchLoading(false);
-    }
+    let active = true;
+    api.get<Document>(`/documents/${id}`)
+      .then(({ data }) => {
+        if (!active) return;
+        setTitle(data.title);
+        setDescription(data.description);
+        setCategory(data.category);
+      })
+      .catch((error) => console.error('Failed to fetch document:', error))
+      .finally(() => { if (active) setFetchLoading(false); });
+    return () => { active = false; };
   }, [id]);
-
-  useEffect(() => { if (id) void fetchDocument(); }, [id, fetchDocument]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

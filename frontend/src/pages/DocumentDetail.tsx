@@ -43,8 +43,14 @@ const DocumentDetail = () => {
   }, [id]);
 
   useEffect(() => {
-    void fetchDocument();
-  }, [fetchDocument]);
+    if (!id) return;
+    let active = true;
+    api.get<Document>(`/documents/${id}`)
+      .then((response) => { if (active) setDocument(response.data); })
+      .catch((error) => console.error('Failed to fetch document:', error))
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [id]);
 
   useEffect(() => {
     if (!document) return;

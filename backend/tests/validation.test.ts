@@ -1,12 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { registerSchema, createWorkflowSchema, approveRejectSchema, returnForChangesSchema } from '../src/utils/validation.js';
+import { registerSchema, loginSchema, createDocumentSchema, createWorkflowSchema, approveRejectSchema, returnForChangesSchema } from '../src/utils/validation.js';
 import { ApprovalDecision, DocumentStatus } from '@prisma/client-runtime-v2';
 import { approvalActionError, resolveApprovalTransition } from '../src/services/workflowRules.js';
 
 test('public registration accepts valid profile data and strips any requested role', () => {
   const input = registerSchema.parse({ email: 'person@example.com', password: 'long-password', name: 'Person', role: 'ADMIN' });
   assert.equal('role' in input, false);
+});
+
+test('registration and login reject invalid emails and weak passwords', () => {
+  assert.equal(registerSchema.safeParse({ email: 'not-an-email', password: 'short', name: 'Person' }).success, false);
+  assert.equal(registerSchema.safeParse({ email: 'person@example.com', password: 'short', name: 'Person' }).success, false);
+  assert.equal(loginSchema.safeParse({ email: 'person@example.com', password: '' }).success, false);
+});
+
+test('document creation requires nonempty title, description, and category', () => {
+  assert.equal(createDocumentSchema.safeParse({ title: '', description: 'Valid', category: 'General' }).success, false);
+  assert.equal(createDocumentSchema.safeParse({ title: 'Valid', description: '', category: 'General' }).success, false);
+  assert.equal(createDocumentSchema.safeParse({ title: 'Valid', description: 'Valid', category: '' }).success, false);
 });
 
 test('workflow configuration requires an assigned approver at every stage', () => {

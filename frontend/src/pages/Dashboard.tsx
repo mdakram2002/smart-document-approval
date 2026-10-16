@@ -29,9 +29,9 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<DashboardFilters>({ status: '', category: '', submitterId: '', from: '', to: '' });
 
-  const fetchSummary = useCallback(async (event?: FormEvent) => {
-    event?.preventDefault();
-    if (event) setLoading(true);
+  const fetchSummary = useCallback(async (event: FormEvent) => {
+    event.preventDefault();
+    setLoading(true);
     try {
       const response = await api.get<DashboardSummary>('/dashboard/summary', { params: Object.fromEntries(Object.entries(filters).filter(([, value]) => value)) });
       setSummary(response.data);
@@ -42,7 +42,14 @@ const Dashboard = () => {
     }
   }, [filters]);
 
-  useEffect(() => { void fetchSummary(); }, [fetchSummary]);
+  useEffect(() => {
+    let active = true;
+    api.get<DashboardSummary>('/dashboard/summary')
+      .then((response) => { if (active) setSummary(response.data); })
+      .catch((error) => console.error('Failed to fetch dashboard summary:', error))
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   if (loading) {
     return <div className="flex items-center justify-center h-64">Loading...</div>;

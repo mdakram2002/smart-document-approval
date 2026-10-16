@@ -104,7 +104,7 @@ npm run lint
 npm run test:e2e
 ```
 
-Playwright requires Chromium. Tests needing a role account use `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD`, `E2E_SUBMITTER_EMAIL`/`E2E_SUBMITTER_PASSWORD`, or `E2E_APPROVER_EMAIL`/`E2E_APPROVER_PASSWORD`. Browser registration, document-creation, and workflow-configuration tests also require `E2E_ALLOW_DATABASE_WRITES=true`; use that only with a disposable test database.
+Playwright requires Chromium. Role tests use `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD`, `E2E_SUBMITTER_EMAIL`/`E2E_SUBMITTER_PASSWORD`, `E2E_APPROVER_EMAIL`/`E2E_APPROVER_PASSWORD`, `E2E_APPROVER_TWO_EMAIL`/`E2E_APPROVER_TWO_PASSWORD`, and a unique `E2E_FIXTURE_TAG`. Create and remove the real role/document fixtures from `backend` with `node --loader ts-node/esm tests/e2eFixtures.ts create` and `node --loader ts-node/esm tests/e2eFixtures.ts remove`. Browser registration, document, and workflow tests require `E2E_ALLOW_DATABASE_WRITES=true`; point the backend at a disposable test database for those tests.
 
 ## Docker Compose
 

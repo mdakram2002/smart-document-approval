@@ -4,4 +4,4 @@ This React application uses the backend API at `VITE_API_URL` (default: `http://
 
 Run the development server with `npm run dev`. Use `npm run build` for a production build, `npm run lint` for Oxlint, and `npm run test:e2e` for Playwright browser tests.
 
-Role-specific browser tests use `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD`, `E2E_SUBMITTER_EMAIL`/`E2E_SUBMITTER_PASSWORD`, and `E2E_APPROVER_EMAIL`/`E2E_APPROVER_PASSWORD`. Database-writing browser tests are opt-in through `E2E_ALLOW_DATABASE_WRITES=true` and should only run against a disposable test database. See the repository [SETUP.md](../SETUP.md) for Admin setup, database migrations, and the complete workflow.
+Role-specific browser tests use Admin, Submitter, and two Approver credential pairs plus a unique `E2E_FIXTURE_TAG`. Create/remove the database fixtures with the helper documented in [SETUP.md](../SETUP.md). Database-writing browser tests require `E2E_ALLOW_DATABASE_WRITES=true` and a disposable test database. The suite includes the complete two-stage approval acceptance flow.

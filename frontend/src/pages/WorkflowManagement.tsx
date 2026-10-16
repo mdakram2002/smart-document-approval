@@ -31,7 +31,18 @@ const WorkflowManagement = () => {
     }
   }, []);
 
-  useEffect(() => { void fetchWorkflows(); }, [fetchWorkflows]);
+  useEffect(() => {
+    let active = true;
+    Promise.all([api.get('/workflows'), api.get('/users')])
+      .then(([workflowResponse, userResponse]) => {
+        if (!active) return;
+        setWorkflows(workflowResponse.data);
+        setApprovers(userResponse.data.filter((user: User) => user.role === 'APPROVER' && user.status === 'ACTIVE'));
+      })
+      .catch((error) => console.error('Failed to fetch workflow configuration:', error))
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();

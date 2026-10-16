@@ -4,7 +4,7 @@ import { signInAs } from './helpers';
 test.describe('Authentication', () => {
   test('user can register and login', async ({ page }) => {
     test.skip(process.env.E2E_ALLOW_DATABASE_WRITES !== 'true', 'Requires an explicitly enabled test database because registration writes a user.');
-    const email = `e2e-${Date.now()}@example.test`;
+    const email = `e2e-${process.env.E2E_FIXTURE_TAG}-${Date.now()}@example.test`;
     const password = `Test-${Date.now()}-Password`;
     await page.goto('/register');
     

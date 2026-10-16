@@ -16,7 +16,13 @@ const UserManagement = () => {
     }
   }, []);
 
-  useEffect(() => { void fetchUsers(); }, [fetchUsers]);
+  useEffect(() => {
+    let active = true;
+    api.get('/users')
+      .then((response) => { if (active) setUsers(response.data); })
+      .catch((error) => console.error('Failed to fetch users:', error));
+    return () => { active = false; };
+  }, []);
 
   const toggleUserStatus = async (userId: string, currentStatus: string) => {
     try {

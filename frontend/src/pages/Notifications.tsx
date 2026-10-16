@@ -20,7 +20,18 @@ const Notifications = () => {
     }
   }, []);
 
-  useEffect(() => { void fetchNotifications(); }, [fetchNotifications]);
+  useEffect(() => {
+    let active = true;
+    api.get('/notifications')
+      .then((response) => {
+        if (!active) return;
+        setNotifications(response.data.notifications);
+        setUnreadCount(response.data.unreadCount);
+      })
+      .catch((error) => console.error('Failed to fetch notifications:', error))
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   const markAsRead = async (id: string) => {
     try {

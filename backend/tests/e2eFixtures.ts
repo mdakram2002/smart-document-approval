@@ -8,16 +8,19 @@ const submitterEmail = process.env.E2E_SUBMITTER_EMAIL;
 const submitterPassword = process.env.E2E_SUBMITTER_PASSWORD;
 const approverEmail = process.env.E2E_APPROVER_EMAIL;
 const approverPassword = process.env.E2E_APPROVER_PASSWORD;
+const secondApproverEmail = process.env.E2E_APPROVER_TWO_EMAIL;
+const secondApproverPassword = process.env.E2E_APPROVER_TWO_PASSWORD;
 const tag = process.env.E2E_FIXTURE_TAG;
 
 async function createFixtures() {
-  if (!adminEmail || !adminPassword || !submitterEmail || !submitterPassword || !approverEmail || !approverPassword || !tag) {
-    throw new Error('Set all three E2E role credentials and E2E_FIXTURE_TAG before creating browser fixtures.');
+  if (!adminEmail || !adminPassword || !submitterEmail || !submitterPassword || !approverEmail || !approverPassword || !secondApproverEmail || !secondApproverPassword || !tag) {
+    throw new Error('Set E2E_ADMIN, E2E_SUBMITTER, E2E_APPROVER, E2E_APPROVER_TWO credentials and E2E_FIXTURE_TAG before creating browser fixtures.');
   }
   await ensureAdmin(adminEmail, adminPassword, 'Browser Test Administrator');
-  const [submitter, approver] = await Promise.all([
+  const [submitter, approver, secondApprover] = await Promise.all([
     prisma.user.create({ data: { email: submitterEmail, name: 'Browser Test Submitter', role: 'SUBMITTER', password: await bcrypt.hash(submitterPassword, 10) } }),
     prisma.user.create({ data: { email: approverEmail, name: 'Browser Test Approver', role: 'APPROVER', password: await bcrypt.hash(approverPassword, 10) } }),
+    prisma.user.create({ data: { email: secondApproverEmail, name: 'Browser Test Approver Two', role: 'APPROVER', password: await bcrypt.hash(secondApproverPassword, 10) } }),
   ]);
   const workflow = await prisma.workflowDefinition.create({ data: {
     name: `Browser fixture ${tag}`, category: `Browser-${tag}`,
@@ -25,6 +28,10 @@ async function createFixtures() {
   }, include: { stages: true } });
   const document = await prisma.document.create({ data: {
     title: `Browser fixture ${tag}`, description: 'Temporary browser-test document', category: `Browser-${tag}`,
+    status: 'DRAFT', submitterId: submitter.id,
+  } });
+  await prisma.document.create({ data: {
+    title: `Browser draft fixture ${tag}`, description: 'Temporary editable browser-test draft', category: `Browser-${tag}`,
     status: 'DRAFT', submitterId: submitter.id,
   } });
   const instance = await prisma.workflowInstance.create({ data: { documentId: document.id, workflowDefinitionId: workflow.id } });
@@ -39,12 +46,17 @@ async function createFixtures() {
 
 async function removeFixtures() {
   if (!tag) throw new Error('Set E2E_FIXTURE_TAG before removing browser fixtures.');
-  const emails = [adminEmail, submitterEmail, approverEmail].filter((email): email is string => Boolean(email));
-  const users = await prisma.user.findMany({ where: { email: { in: emails } }, select: { id: true } });
+  const emails = [adminEmail, submitterEmail, approverEmail, secondApproverEmail].filter((email): email is string => Boolean(email));
+  const users = await prisma.user.findMany({ where: { OR: [{ email: { in: emails } }, { email: { startsWith: `e2e-${tag}-` } }] }, select: { id: true } });
   const userIds = users.map(({ id }) => id);
-  const documents = await prisma.document.findMany({ where: { title: `Browser fixture ${tag}` }, select: { id: true } });
+  const documents = await prisma.document.findMany({ where: { OR: [
+    { title: `Browser fixture ${tag}` },
+    { title: { startsWith: `Browser draft fixture ${tag}` } },
+    { title: { startsWith: `E2E Document ${tag} ` } },
+    { title: `Acceptance document ${tag}` },
+  ] }, select: { id: true } });
   const documentIds = documents.map(({ id }) => id);
-  const workflows = await prisma.workflowDefinition.findMany({ where: { category: `Browser-${tag}` }, select: { id: true } });
+  const workflows = await prisma.workflowDefinition.findMany({ where: { category: { in: [`Browser-${tag}`, `Acceptance-${tag}`] } }, select: { id: true } });
   const workflowIds = workflows.map(({ id }) => id);
   await prisma.$transaction(async (tx) => {
     await tx.notification.deleteMany({ where: { OR: [{ recipientId: { in: userIds } }, { documentId: { in: documentIds } }] } });

@@ -488,7 +488,8 @@ router.post('/:id/attachments', authenticate, upload.single('file'), async (req,
       return created;
     });
 
-    res.status(201).json(attachment);
+    const { path: _storedPath, ...publicAttachment } = attachment;
+    res.status(201).json(publicAttachment);
   } catch (error) {
     if (storedPath) await unlink(storedPath).catch(() => undefined);
     next(error);

@@ -54,7 +54,7 @@ test.describe('Admin Authorization', () => {
 
   test('admin can configure two sequential stages and assign approvers', async ({ page }) => {
     test.skip(process.env.E2E_ALLOW_DATABASE_WRITES !== 'true', 'Workflow configuration writes to the database; enable only for a disposable test database.');
-    test.skip(!process.env.E2E_FIXTURE_TAG || !process.env.E2E_APPROVER_EMAIL, 'Temporary E2E approver fixture is required.');
+    test.skip(!process.env.E2E_FIXTURE_TAG || !process.env.E2E_APPROVER_EMAIL || !process.env.E2E_APPROVER_TWO_EMAIL, 'Temporary E2E approver fixtures are required.');
     await page.goto('/workflows');
     await page.getByRole('button', { name: 'New Workflow' }).click();
     const form = page.locator('form');
@@ -64,7 +64,7 @@ test.describe('Admin Authorization', () => {
     await form.getByRole('button', { name: 'Add stage' }).click();
     const approverSelects = form.locator('select[multiple]');
     await approverSelects.nth(0).selectOption({ label: `Browser Test Approver (${process.env.E2E_APPROVER_EMAIL})` });
-    await approverSelects.nth(1).selectOption({ label: `Browser Test Approver (${process.env.E2E_APPROVER_EMAIL})` });
+    await approverSelects.nth(1).selectOption({ label: `Browser Test Approver Two (${process.env.E2E_APPROVER_TWO_EMAIL})` });
     await form.getByRole('button', { name: 'Create', exact: true }).click();
     await expect(page.getByRole('heading', { name: workflowName })).toBeVisible();
     const workflowCard = page.locator('div.bg-white.rounded-lg.shadow.p-6').filter({ has: page.getByRole('heading', { name: workflowName }) });

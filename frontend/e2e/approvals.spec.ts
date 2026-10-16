@@ -18,12 +18,10 @@ test.describe('Approval Workflow', () => {
 
   test('document shows approval timeline', async ({ page }) => {
     await signInAs(page, 'SUBMITTER');
-    
     await page.goto('/documents');
-    
-    const firstRow = page.locator('table tbody tr').first();
-    await firstRow.locator('text=View').click();
-    
+    const taskDocument = page.locator('table tbody tr').filter({ hasText: `Browser fixture ${process.env.E2E_FIXTURE_TAG}` });
+    await expect(taskDocument).toBeVisible();
+    await taskDocument.getByRole('link', { name: 'View' }).click();
     await expect(page.locator('text=Approval Timeline')).toBeVisible();
   });
 });

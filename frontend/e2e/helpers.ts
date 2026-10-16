@@ -1,6 +1,6 @@
 import { test, type Page } from '@playwright/test';
 
-export async function signInAs(page: Page, role: 'ADMIN' | 'SUBMITTER' | 'APPROVER') {
+export async function signInAs(page: Page, role: 'ADMIN' | 'SUBMITTER' | 'APPROVER' | 'APPROVER_TWO') {
   const email = process.env[`E2E_${role}_EMAIL`];
   const password = process.env[`E2E_${role}_PASSWORD`];
   test.skip(!email || !password, `Set E2E_${role}_EMAIL and E2E_${role}_PASSWORD for this role test.`);

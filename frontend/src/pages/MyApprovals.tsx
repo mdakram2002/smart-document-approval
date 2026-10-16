@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../lib/api';
 import type { ApprovalRecord } from '../types';
@@ -7,18 +7,14 @@ const MyApprovals = () => {
   const [approvals, setApprovals] = useState<ApprovalRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchApprovals = useCallback(async () => {
-    try {
-      const response = await api.get('/approvals/my-tasks');
-      setApprovals(response.data);
-    } catch (error) {
-      console.error('Failed to fetch approvals:', error);
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    let active = true;
+    api.get('/approvals/my-tasks')
+      .then((response) => { if (active) setApprovals(response.data); })
+      .catch((error) => console.error('Failed to fetch approvals:', error))
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, []);
-
-  useEffect(() => { void fetchApprovals(); }, [fetchApprovals]);
 
   if (loading) {
     return <div className="flex items-center justify-center h-64">Loading...</div>;

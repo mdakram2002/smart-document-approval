@@ -1104,14 +1104,14 @@ npm run lint
 npm run test:e2e
 ```
 
-Playwright skips role-specific browser tests when `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD`, `E2E_SUBMITTER_EMAIL`/`E2E_SUBMITTER_PASSWORD`, or `E2E_APPROVER_EMAIL`/`E2E_APPROVER_PASSWORD` are unset. Set `E2E_ALLOW_DATABASE_WRITES=true` only when the backend is connected to a disposable test database; registration, document creation, and workflow-configuration browser tests write data.
+Role tests require `E2E_ADMIN_EMAIL`/`E2E_ADMIN_PASSWORD`, `E2E_SUBMITTER_EMAIL`/`E2E_SUBMITTER_PASSWORD`, `E2E_APPROVER_EMAIL`/`E2E_APPROVER_PASSWORD`, `E2E_APPROVER_TWO_EMAIL`/`E2E_APPROVER_TWO_PASSWORD`, and a unique `E2E_FIXTURE_TAG`. Create and remove their real database fixtures from `backend` with `node --loader ts-node/esm tests/e2eFixtures.ts create` and `node --loader ts-node/esm tests/e2eFixtures.ts remove`. Set `E2E_ALLOW_DATABASE_WRITES=true` only when the backend is connected to a disposable test database; the browser suite writes registration, documents, and workflow configuration data.
 
 ### Test Coverage
 
 The test suite covers:
 
 1. **Backend unit and database integration**: role stripping, workflow validation/transitions, Admin seed/login, role assignment, sequential approvals, final approval, reject/return/resubmit/withdraw, ownership, forbidden and conflicting decisions, notifications, audit records, and dashboard filters.
-2. **Browser tests**: login validation, protected page redirects, and any role workflows with supplied E2E credentials. Role-dependent cases are skipped when their credentials are absent.
+2. **Browser tests**: login/registration, role navigation, document creation and draft editing, workflow configuration, and full sequential approval with notification, history, and dashboard assertions. Role-dependent tests require the fixture credentials above.
 
 ### Test Reports
 
