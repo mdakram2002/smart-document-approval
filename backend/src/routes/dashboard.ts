@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { Prisma, DocumentStatus, UserStatus } from '@prisma/client-runtime-v2';
 import { authenticate } from '../middleware/auth.js';
 
@@ -6,7 +6,7 @@ import { prisma } from '../db.js';
 import { parseCreatedDateRange } from '../utils/dateFilters.js';
 const router = Router();
 
-router.get('/summary', authenticate, async (req, res, next) => {
+router.get('/summary', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { role, id } = req.user!;
 
@@ -36,7 +36,7 @@ router.get('/summary', authenticate, async (req, res, next) => {
       return records.filter((record) => record.workflowInstance.document.currentStage === record.workflowStage.stageOrder).length;
     };
 
-    let summary: any = {};
+    let summary: Record<string, unknown> = {};
 
     if (role === 'ADMIN') {
       // Admin dashboard - organization-wide statistics

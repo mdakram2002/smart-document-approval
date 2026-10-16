@@ -1,11 +1,11 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { createWorkflowSchema, updateWorkflowSchema } from '../utils/validation.js';
 
 import { prisma } from '../db.js';
 const router = Router();
 
-router.get('/', authenticate, authorize('ADMIN'), async (req, res, next) => {
+router.get('/', authenticate, authorize('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const workflows = await prisma.workflowDefinition.findMany({
       include: {
@@ -34,7 +34,7 @@ router.get('/', authenticate, authorize('ADMIN'), async (req, res, next) => {
   }
 });
 
-router.post('/', authenticate, authorize('ADMIN'), async (req, res, next) => {
+router.post('/', authenticate, authorize('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const validatedData = createWorkflowSchema.parse(req.body);
 
@@ -82,7 +82,7 @@ router.post('/', authenticate, authorize('ADMIN'), async (req, res, next) => {
   }
 });
 
-router.get('/:id', authenticate, authorize('ADMIN'), async (req, res, next) => {
+router.get('/:id', authenticate, authorize('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
     const workflow = await prisma.workflowDefinition.findUnique({
@@ -112,7 +112,7 @@ router.get('/:id', authenticate, authorize('ADMIN'), async (req, res, next) => {
   }
 });
 
-router.patch('/:id', authenticate, authorize('ADMIN'), async (req, res, next) => {
+router.patch('/:id', authenticate, authorize('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
     const validatedData = updateWorkflowSchema.parse(req.body);
@@ -171,7 +171,7 @@ router.patch('/:id', authenticate, authorize('ADMIN'), async (req, res, next) =>
   }
 });
 
-router.post('/:id/activate', authenticate, authorize('ADMIN'), async (req, res, next) => {
+router.post('/:id/activate', authenticate, authorize('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
     const workflow = await prisma.workflowDefinition.findUnique({ where: { id }, include: { stages: { include: { approverAssignments: { include: { approver: { select: { role: true, status: true } } } } } } } });
@@ -193,7 +193,7 @@ router.post('/:id/activate', authenticate, authorize('ADMIN'), async (req, res, 
   }
 });
 
-router.post('/:id/deactivate', authenticate, authorize('ADMIN'), async (req, res, next) => {
+router.post('/:id/deactivate', authenticate, authorize('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
     const current = await prisma.workflowDefinition.findUnique({ where: { id } });

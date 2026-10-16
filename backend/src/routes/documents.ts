@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { DocumentStatus } from '@prisma/client-runtime-v2';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { createDocumentSchema, updateDocumentSchema } from '../utils/validation.js';
@@ -30,7 +30,7 @@ const allowedMimeTypes: Record<string, string[]> = {
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: env.MAX_FILE_SIZE },
-  fileFilter: (req, file, cb) => {
+  fileFilter: (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (allowedMimeTypes[ext]?.includes(file.mimetype.toLowerCase())) {
       cb(null, true);
@@ -40,14 +40,14 @@ const upload = multer({
   },
 });
 
-router.get('/', authenticate, async (req, res, next) => {
+router.get('/', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status, category, submitterId, from, to, page = '1', limit = '10' } = req.query;
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
 
-    const where: any = {};
+    const where: Record<string, unknown> = {};
 
     if (!Number.isInteger(pageNum) || pageNum < 1 || !Number.isInteger(limitNum) || limitNum < 1 || limitNum > 100) {
       return res.status(400).json({ error: 'page must be positive and limit must be between 1 and 100' });
@@ -63,12 +63,12 @@ router.get('/', authenticate, async (req, res, next) => {
         where: { approverId: req.user!.id },
         select: { workflowInstanceId: true },
       });
-      const workflowInstanceIds = assignedDocuments.map((r: any) => r.workflowInstanceId);
+      const workflowInstanceIds = assignedDocuments.map((r) => r.workflowInstanceId);
       const instances = await prisma.workflowInstance.findMany({
         where: { id: { in: workflowInstanceIds } },
         select: { documentId: true },
       });
-      where.id = { in: instances.map((i: any) => i.documentId) };
+      where.id = { in: instances.map((i) => i.documentId) };
     }
 
     if (status) where.status = status;
@@ -113,7 +113,7 @@ router.get('/', authenticate, async (req, res, next) => {
   }
 });
 
-router.get('/:id', authenticate, async (req, res, next) => {
+router.get('/:id', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
     const document = await prisma.document.findUnique({
@@ -171,7 +171,7 @@ router.get('/:id', authenticate, async (req, res, next) => {
   }
 });
 
-router.post('/', authenticate, authorize('SUBMITTER'), async (req, res, next) => {
+router.post('/', authenticate, authorize('SUBMITTER'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const validatedData = createDocumentSchema.parse(req.body);
     const document = await prisma.$transaction(async (tx) => {
@@ -191,7 +191,7 @@ router.post('/', authenticate, authorize('SUBMITTER'), async (req, res, next) =>
   }
 });
 
-router.patch('/:id', authenticate, async (req, res, next) => {
+router.patch('/:id', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
     const validatedData = updateDocumentSchema.parse(req.body);
@@ -232,7 +232,7 @@ router.patch('/:id', authenticate, async (req, res, next) => {
   }
 });
 
-router.post('/:id/submit', authenticate, authorize('SUBMITTER'), async (req, res, next) => {
+router.post('/:id/submit', authenticate, authorize('SUBMITTER'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
 
@@ -250,7 +250,7 @@ router.post('/:id/submit', authenticate, authorize('SUBMITTER'), async (req, res
     }
 
     // Create workflow instance and approval records in a transaction
-    const result = await prisma.$transaction(async (tx: any) => {
+    const result = await prisma.$transaction(async (tx) => {
       // Prefer a usable category workflow, falling back to a usable General workflow.
       // Legacy workflows without assignments are skipped so they cannot shadow a
       // newly configured workflow of the same category.
@@ -265,11 +265,11 @@ router.post('/:id/submit', authenticate, authorize('SUBMITTER'), async (req, res
         },
         orderBy: { createdAt: 'asc' },
       });
-      const usable = candidates.filter((candidate: any) => candidate.stages.length > 0 && candidate.stages.every((stage: any) =>
-        stage.approverAssignments.length > 0 && stage.approverAssignments.every((assignment: any) =>
+      const usable = candidates.filter((candidate) => candidate.stages.length > 0 && candidate.stages.every((stage) =>
+        stage.approverAssignments.length > 0 && stage.approverAssignments.every((assignment) =>
           assignment.approver.role === 'APPROVER' && assignment.approver.status === 'ACTIVE')));
-      const workflow = usable.find((candidate: any) => candidate.category === document.category)
-        ?? usable.find((candidate: any) => candidate.category === 'General');
+      const workflow = usable.find((candidate) => candidate.category === document.category)
+        ?? usable.find((candidate) => candidate.category === 'General');
       if (!workflow) throw new Error('No active workflow with assigned active approvers is configured');
 
       const workflowInstance = await tx.workflowInstance.create({
@@ -285,7 +285,7 @@ router.post('/:id/submit', authenticate, authorize('SUBMITTER'), async (req, res
         },
       });
 
-      const assignments = workflow.stages.flatMap((stage: any) => stage.approverAssignments.map((assignment: any) => ({
+      const assignments = workflow.stages.flatMap((stage) => stage.approverAssignments.map((assignment) => ({
         workflowInstanceId: workflowInstance.id,
         workflowStageId: stage.id,
         approverId: assignment.approverId,
@@ -307,7 +307,7 @@ router.post('/:id/submit', authenticate, authorize('SUBMITTER'), async (req, res
 
       const firstStage = workflow.stages[0];
       await tx.notification.createMany({
-        data: firstStage.approverAssignments.map((assignment: any) => ({
+        data: firstStage.approverAssignments.map((assignment) => ({
           recipientId: assignment.approverId,
           type: document.status === DocumentStatus.RETURNED_FOR_CHANGES ? 'DOCUMENT_RESUBMITTED' : 'DOCUMENT_SUBMITTED',
           title: document.status === DocumentStatus.RETURNED_FOR_CHANGES ? 'Document resubmitted' : 'New document for approval',
@@ -333,7 +333,7 @@ router.post('/:id/submit', authenticate, authorize('SUBMITTER'), async (req, res
   }
 });
 
-router.post('/:id/withdraw', authenticate, authorize('SUBMITTER'), async (req, res, next) => {
+router.post('/:id/withdraw', authenticate, authorize('SUBMITTER'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
 
@@ -388,7 +388,7 @@ router.post('/:id/withdraw', authenticate, authorize('SUBMITTER'), async (req, r
   }
 });
 
-router.get('/:id/history', authenticate, async (req, res, next) => {
+router.get('/:id/history', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
 
@@ -434,7 +434,7 @@ router.get('/:id/history', authenticate, async (req, res, next) => {
   }
 });
 
-router.post('/:id/attachments', authenticate, upload.single('file'), async (req, res, next) => {
+router.post('/:id/attachments', authenticate, upload.single('file'), async (req: Request, res: Response, next: NextFunction) => {
   let storedPath: string | undefined;
   try {
     const id = req.params.id as string;
@@ -496,7 +496,7 @@ router.post('/:id/attachments', authenticate, upload.single('file'), async (req,
   }
 });
 
-router.get('/:id/attachments/:attachmentId', authenticate, async (req, res, next) => {
+router.get('/:id/attachments/:attachmentId', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
     const attachmentId = req.params.attachmentId as string;

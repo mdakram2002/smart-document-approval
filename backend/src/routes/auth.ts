@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { register, login } from '../services/authService.js';
 import { registerSchema, loginSchema } from '../utils/validation.js';
 import { authenticate } from '../middleware/auth.js';
@@ -6,27 +6,27 @@ import { prisma } from '../db.js';
 
 const router = Router();
 
-router.post('/register', async (req, res, next) => {
+router.post('/register', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const validatedData = registerSchema.parse(req.body);
     const user = await register(validatedData.email, validatedData.password, validatedData.name);
     res.status(201).json(user);
-  } catch (error: any) {
+  } catch (error) {
     next(error);
   }
 });
 
-router.post('/login', async (req, res, next) => {
+router.post('/login', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const validatedData = loginSchema.parse(req.body);
     const result = await login(validatedData.email, validatedData.password);
     res.json(result);
-  } catch (error: any) {
+  } catch (error) {
     next(error);
   }
 });
 
-router.post('/logout', authenticate, async (req, res, next) => {
+router.post('/logout', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const token = req.accessToken;
     await prisma.$transaction(async (tx) => {
@@ -41,7 +41,7 @@ router.post('/logout', authenticate, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-router.get('/me', authenticate, (req, res) => {
+router.get('/me', authenticate, (req: Request, res: Response) => {
   res.json(req.user);
 });
 

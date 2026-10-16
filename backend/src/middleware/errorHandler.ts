@@ -74,16 +74,14 @@ export const errorHandler = (
   }
 
   if (error.name === 'PrismaClientKnownRequestError') {
-    // @ts-ignore
-    if (error.code === 'P2002') {
+    const prismaError = error as { code?: string };
+    if (prismaError.code === 'P2002') {
       return res.status(409).json({ error: 'Resource already exists' });
     }
-    // @ts-ignore
-    if (error.code === 'P2025') {
+    if (prismaError.code === 'P2025') {
       return res.status(404).json({ error: 'Resource not found' });
     }
-    // @ts-ignore
-    if (error.code === 'P2034') {
+    if (prismaError.code === 'P2034') {
       return res.status(409).json({ error: 'Concurrent workflow update; reload and retry' });
     }
   }

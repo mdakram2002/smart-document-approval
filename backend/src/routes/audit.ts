@@ -1,11 +1,11 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { AuditAction } from '@prisma/client-runtime-v2';
 
 import { prisma } from '../db.js';
 const router = Router();
 
-router.get('/', authenticate, authorize('ADMIN'), async (req, res, next) => {
+router.get('/', authenticate, authorize('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { action, entityType, actorId, page = '1', limit = '50' } = req.query;
     const pageNum = parseInt(page as string);
@@ -16,7 +16,7 @@ router.get('/', authenticate, authorize('ADMIN'), async (req, res, next) => {
     if (action && (typeof action !== 'string' || !Object.values(AuditAction).includes(action as AuditAction))) return res.status(400).json({ error: 'Invalid audit action filter' });
     if (entityType && typeof entityType !== 'string' || actorId && typeof actorId !== 'string') return res.status(400).json({ error: 'Invalid audit filter' });
 
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     if (action) where.action = action;
     if (entityType) where.entityType = entityType;
     if (actorId) where.actorId = actorId;

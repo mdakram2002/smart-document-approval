@@ -1,10 +1,10 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate } from '../middleware/auth.js';
 
 import { prisma } from '../db.js';
 const router = Router();
 
-router.get('/', authenticate, async (req, res, next) => {
+router.get('/', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { unreadOnly = 'false' } = req.query;
     const unreadOnlyBool = unreadOnly === 'true';
@@ -33,7 +33,7 @@ router.get('/', authenticate, async (req, res, next) => {
   }
 });
 
-router.patch('/:id/read', authenticate, async (req, res, next) => {
+router.patch('/:id/read', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
 
@@ -57,7 +57,7 @@ router.patch('/:id/read', authenticate, async (req, res, next) => {
   }
 });
 
-router.post('/read-all', authenticate, async (req, res, next) => {
+router.post('/read-all', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     await prisma.notification.updateMany({
       where: {

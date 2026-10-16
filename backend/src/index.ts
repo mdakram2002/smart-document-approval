@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 
 import { env } from './utils/env.js';
@@ -17,7 +17,7 @@ const allowedOrigins = new Set(env.CORS_ORIGIN.split(',').map((origin) => origin
 
 // Middleware
 app.use(cors({
-  origin: (origin, callback) => {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow: boolean) => void) => {
     const isLocalDevelopmentOrigin = env.NODE_ENV === 'development'
       && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin ?? '');
     callback(null, !origin || allowedOrigins.has(origin) || isLocalDevelopmentOrigin);
@@ -38,7 +38,7 @@ app.use('/api/audit-logs', auditRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 

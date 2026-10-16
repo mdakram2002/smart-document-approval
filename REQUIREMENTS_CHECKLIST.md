@@ -1,6 +1,6 @@
 # Edvexa assignment audit
 
-Verified 2026-10-16 against a freshly created, uniquely named PostgreSQL QA database that was dropped after the run. PASS means exercised by an automated API or browser test, not inferred from source alone.
+Verified 2026-10-16 using the executed backend unit tests, an isolated PostgreSQL API integration run, and the isolated full Playwright run. PASS means the behavior was exercised by an automated API or browser test, not inferred from source alone. Test databases and temporary fixtures were removed after the runs.
 
 | # | Requirement | Status | Verification |
 |---|---|---|---|
@@ -11,14 +11,14 @@ Verified 2026-10-16 against a freshly created, uniquely named PostgreSQL QA data
 | 5 | Notifications | **PASS** | Integration verified first-stage notification, no premature second-stage notification, second-stage assignment, submitter decision notifications, cancellation notifications for ended workflows, withdrawal notifications, private read access, and unread counts. |
 | 6 | Audit history | **PASS** | Integration verified document submission/decision comments, return history, login/logout/user events, and Admin audit listing. Playwright verified the Admin Audit History page. |
 | 7 | Dashboard and reporting | **PASS** | Integration verified status/category/submitter/date filters against database results, date-only full-day bounds, invalid ranges, and active pending counts. Full browser acceptance filtered approved results by status, category, submitter, and date and checked the resulting counts. |
-| 8 | Database and APIs | **PASS** | Prisma schema validates; all five migrations are applied; the integration test covers input validation, authorization, ownership, and conflict HTTP statuses. Backend build passes. |
-| 9 | Automated testing | **PASS** | Eight backend unit tests pass; isolated PostgreSQL API integration passes; all 20 Playwright tests pass with zero skips, including registration/document writes, owned draft edit, and the complete two-stage browser acceptance. |
+| 8 | Database and APIs | **PASS** | `npx prisma validate` passed; `npx prisma migrate status` reported five migrations and an up-to-date schema. The isolated PostgreSQL integration test passed, covering input validation, authorization, ownership, and conflict HTTP statuses. Backend build passed. |
+| 9 | Automated testing | **PASS** | `npm test` reported 8 passed and 1 database integration test skipped by default. The separately enabled isolated PostgreSQL integration run reported 1 passed. Playwright reported 20 passed, 0 skipped, and 0 failed, including registration/document writes, owned draft editing, and the complete two-stage browser acceptance. |
 | 10 | Documentation | **PASS** | README and SETUP include Admin seed/login, roles, full workflow, Prisma schema/migrations, API routes/filters, environment handling, and test commands. Docker Compose uses private environment files and no fixed JWT/Admin password. |
 
 ## Commands and results
 
 - `npm test` (`backend`): 8 passed, 1 integration test skipped by default.
-- Isolated PostgreSQL QA: created random `smart_document_approval_qa_*` databases, ran `npx prisma migrate deploy`, and ran `npm run test:integration` with `RUN_DB_INTEGRATION_TESTS=true` (1 passed); each database was dropped after testing.
+- Isolated PostgreSQL QA: created a random `smart_document_approval_qa_*` database, ran `npx prisma migrate deploy`, and ran `npm run test:integration` with `RUN_DB_INTEGRATION_TESTS=true` (1 passed); the database was dropped after testing.
 - `npm run build` (`backend`): passed.
 - `npx prisma validate`: passed.
 - `npx prisma migrate status`: five migrations found, schema up to date.

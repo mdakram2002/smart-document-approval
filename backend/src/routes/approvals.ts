@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { ApprovalDecision, DocumentStatus } from '@prisma/client-runtime-v2';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { approveSchema, approveRejectSchema, returnForChangesSchema } from '../utils/validation.js';
@@ -7,7 +7,7 @@ import { approvalActionError, resolveApprovalTransition } from '../services/work
 import { prisma } from '../db.js';
 const router = Router();
 
-router.get('/my-tasks', authenticate, authorize('APPROVER'), async (req, res, next) => {
+router.get('/my-tasks', authenticate, authorize('APPROVER'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const tasks = await prisma.approvalRecord.findMany({
       where: { approverId: req.user!.id, decision: 'PENDING', workflowInstance: { document: { status: 'PENDING_APPROVAL' } } },
@@ -18,7 +18,7 @@ router.get('/my-tasks', authenticate, authorize('APPROVER'), async (req, res, ne
   } catch (error) { next(error); }
 });
 
-router.get('/:id', authenticate, async (req, res, next) => {
+router.get('/:id', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const task = await prisma.approvalRecord.findUnique({ where: { id: req.params.id as string }, include: { workflowInstance: { include: { document: true, workflowDefinition: true } }, workflowStage: true, approver: { select: { id: true, name: true, email: true } } } });
     if (!task) return res.status(404).json({ error: 'Approval record not found' });
@@ -27,7 +27,7 @@ router.get('/:id', authenticate, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-async function decide(req: any, res: any, next: any, decision: ApprovalDecision, comment: string | null) {
+async function decide(req: Request, res: Response, next: NextFunction, decision: ApprovalDecision, comment: string | null) {
   try {
     const id = req.params.id as string;
     const task = await prisma.approvalRecord.findUnique({
@@ -105,13 +105,13 @@ async function decide(req: any, res: any, next: any, decision: ApprovalDecision,
   } catch (error) { next(error); }
 }
 
-router.post('/:id/approve', authenticate, authorize('APPROVER'), (req, res, next) => {
+router.post('/:id/approve', authenticate, authorize('APPROVER'), (req: Request, res: Response, next: NextFunction) => {
   try { const { comment } = approveSchema.parse(req.body ?? {}); return decide(req, res, next, ApprovalDecision.APPROVED, comment?.trim() || null); } catch (error) { next(error); }
 });
-router.post('/:id/reject', authenticate, authorize('APPROVER'), (req, res, next) => {
+router.post('/:id/reject', authenticate, authorize('APPROVER'), (req: Request, res: Response, next: NextFunction) => {
   try { const { comment } = approveRejectSchema.parse(req.body); return decide(req, res, next, ApprovalDecision.REJECTED, comment); } catch (error) { next(error); }
 });
-router.post('/:id/return', authenticate, authorize('APPROVER'), (req, res, next) => {
+router.post('/:id/return', authenticate, authorize('APPROVER'), (req: Request, res: Response, next: NextFunction) => {
   try { const { comment } = returnForChangesSchema.parse(req.body); return decide(req, res, next, ApprovalDecision.RETURNED, comment); } catch (error) { next(error); }
 });
 

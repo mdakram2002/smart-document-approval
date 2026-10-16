@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { UserStatus } from '@prisma/client-runtime-v2';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { updateUserSchema, userStatusSchema } from '../utils/validation.js';
@@ -6,7 +6,7 @@ import { updateUserSchema, userStatusSchema } from '../utils/validation.js';
 import { prisma } from '../db.js';
 const router = Router();
 
-router.get('/', authenticate, authorize('ADMIN'), async (req, res, next) => {
+router.get('/', authenticate, authorize('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const users = await prisma.user.findMany({
       select: {
@@ -26,10 +26,10 @@ router.get('/', authenticate, authorize('ADMIN'), async (req, res, next) => {
   }
 });
 
-router.get('/:id', authenticate, async (req, res, next) => {
+router.get('/:id', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
-    
+
     // Users can only view their own profile or admins can view any
     if (req.user!.id !== id && req.user!.role !== 'ADMIN') {
       return res.status(403).json({ error: 'Insufficient permissions' });
@@ -58,7 +58,7 @@ router.get('/:id', authenticate, async (req, res, next) => {
   }
 });
 
-router.patch('/:id', authenticate, authorize('ADMIN'), async (req, res, next) => {
+router.patch('/:id', authenticate, authorize('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
     const validatedData = updateUserSchema.parse(req.body);
@@ -93,7 +93,7 @@ router.patch('/:id', authenticate, authorize('ADMIN'), async (req, res, next) =>
   }
 });
 
-router.patch('/:id/status', authenticate, authorize('ADMIN'), async (req, res, next) => {
+router.patch('/:id/status', authenticate, authorize('ADMIN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = req.params.id as string;
     const { status } = userStatusSchema.parse(req.body);

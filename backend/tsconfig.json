@@ -13,7 +13,8 @@
     "moduleResolution": "bundler",
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "types": ["node"]
   },
   "ts-node": {
     "esm": true,
