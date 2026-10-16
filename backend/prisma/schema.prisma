@@ -1,0 +1,242 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  SUBMITTER
+  APPROVER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum DocumentStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  RETURNED_FOR_CHANGES
+}
+
+enum ApprovalDecision {
+  PENDING
+  APPROVED
+  REJECTED
+  RETURNED
+}
+
+enum NotificationType {
+  DOCUMENT_SUBMITTED
+  DOCUMENT_APPROVED
+  DOCUMENT_REJECTED
+  DOCUMENT_RETURNED
+  DOCUMENT_RESUBMITTED
+  DOCUMENT_WITHDRAWN
+  WORKFLOW_ASSIGNED
+}
+
+enum AuditAction {
+  USER_CREATED
+  USER_UPDATED
+  USER_ACTIVATED
+  USER_DEACTIVATED
+  USER_ROLE_CHANGED
+  DOCUMENT_CREATED
+  DOCUMENT_UPDATED
+  DOCUMENT_SUBMITTED
+  DOCUMENT_WITHDRAWN
+  DOCUMENT_APPROVED
+  DOCUMENT_REJECTED
+  DOCUMENT_RETURNED
+  DOCUMENT_RESUBMITTED
+  APPROVAL_DECISION
+  WORKFLOW_CREATED
+  WORKFLOW_UPDATED
+  WORKFLOW_ACTIVATED
+  WORKFLOW_DEACTIVATED
+  LOGIN
+  LOGOUT
+}
+
+model User {
+  id        String     @id @default(uuid())
+  email     String     @unique
+  password  String
+  name      String
+  role      UserRole   @default(SUBMITTER)
+  status    UserStatus @default(ACTIVE)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  documents           Document[]
+  assignedApprovals   ApprovalRecord[]        @relation("AssignedApprover")
+  workflowAssignments WorkflowStageApprover[]
+  notifications       Notification[]
+  auditEntries        AuditEntry[]            @relation("Actor")
+
+  @@index([email])
+  @@index([role])
+  @@index([status])
+}
+
+model Document {
+  id                 String             @id @default(uuid())
+  title              String
+  description        String
+  category           String
+  status             DocumentStatus     @default(DRAFT)
+  version            Int                @default(1)
+  submitterId        String
+  submitter          User               @relation(fields: [submitterId], references: [id])
+  attachments        Attachment[]
+  workflowInstanceId String?
+  workflowInstance   WorkflowInstance?  @relation("CurrentWorkflowInstance", fields: [workflowInstanceId], references: [id])
+  workflowInstances  WorkflowInstance[] @relation("DocumentWorkflowHistory")
+  currentStage       Int?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  submittedAt        DateTime?
+  finalDecisionAt    DateTime?
+
+  @@index([submitterId])
+  @@index([status])
+  @@index([category])
+  @@index([workflowInstanceId])
+  @@index([createdAt])
+}
+
+model Attachment {
+  id           String   @id @default(uuid())
+  documentId   String
+  document     Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  path         String
+  createdAt    DateTime @default(now())
+
+  @@index([documentId])
+}
+
+model WorkflowDefinition {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  category    String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stages    WorkflowStage[]
+  instances WorkflowInstance[]
+
+  @@index([category])
+  @@index([isActive])
+}
+
+model WorkflowStage {
+  id                   String             @id @default(uuid())
+  workflowDefinitionId String
+  workflowDefinition   WorkflowDefinition @relation(fields: [workflowDefinitionId], references: [id], onDelete: Cascade)
+  stageOrder           Int
+  name                 String
+  description          String?
+  createdAt            DateTime           @default(now())
+
+  approvalRecords     ApprovalRecord[]
+  approverAssignments WorkflowStageApprover[]
+
+  @@unique([workflowDefinitionId, stageOrder])
+  @@index([workflowDefinitionId])
+}
+
+model WorkflowStageApprover {
+  id              String        @id @default(uuid())
+  workflowStageId String
+  workflowStage   WorkflowStage @relation(fields: [workflowStageId], references: [id], onDelete: Cascade)
+  approverId      String
+  approver        User          @relation(fields: [approverId], references: [id], onDelete: Restrict)
+  createdAt       DateTime      @default(now())
+
+  @@unique([workflowStageId, approverId])
+  @@index([approverId])
+}
+
+model WorkflowInstance {
+  id                   String             @id @default(uuid())
+  documentId           String
+  document             Document           @relation("DocumentWorkflowHistory", fields: [documentId], references: [id])
+  currentForDocuments  Document[]         @relation("CurrentWorkflowInstance")
+  workflowDefinitionId String
+  workflowDefinition   WorkflowDefinition @relation(fields: [workflowDefinitionId], references: [id])
+  revisionNumber       Int                @default(1)
+  createdAt            DateTime           @default(now())
+  completedAt          DateTime?
+
+  approvalRecords ApprovalRecord[]
+
+  @@index([documentId])
+  @@index([workflowDefinitionId])
+}
+
+model ApprovalRecord {
+  id                 String           @id @default(uuid())
+  workflowInstanceId String
+  workflowInstance   WorkflowInstance @relation(fields: [workflowInstanceId], references: [id], onDelete: Cascade)
+  workflowStageId    String
+  workflowStage      WorkflowStage    @relation(fields: [workflowStageId], references: [id])
+  approverId         String
+  approver           User             @relation("AssignedApprover", fields: [approverId], references: [id])
+  decision           ApprovalDecision @default(PENDING)
+  comment            String?
+  decisionAt         DateTime?
+  createdAt          DateTime         @default(now())
+
+  @@unique([workflowInstanceId, workflowStageId, approverId])
+  @@index([workflowInstanceId])
+  @@index([approverId])
+  @@index([decision])
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  recipientId String
+  recipient   User             @relation(fields: [recipientId], references: [id])
+  type        NotificationType
+  title       String
+  message     String
+  documentId  String?
+  isRead      Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+
+  @@index([recipientId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model AuditEntry {
+  id            String      @id @default(uuid())
+  actorId       String
+  actor         User        @relation("Actor", fields: [actorId], references: [id])
+  action        AuditAction
+  entityType    String
+  entityId      String
+  previousState String?
+  newState      String?
+  metadata      String?
+  timestamp     DateTime    @default(now())
+
+  @@index([actorId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([timestamp])
+}

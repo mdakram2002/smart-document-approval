@@ -245,7 +245,15 @@ npm run prisma:seed
 
 ## Seed Data and Administrator Setup
 
-The seed script is non-destructive. Set `SEED_ADMIN_EMAIL`, `SEED_ADMIN_NAME`, and a unique `SEED_ADMIN_PASSWORD` (12 or more characters) in `backend/.env`, then run `npm run prisma:seed` from `backend/`. It upserts only that administrator and does not create sample users or documents. Public registration creates SUBMITTER accounts; an administrator can assign APPROVER or ADMIN roles through User Management.
+One active Admin account already exists in the configured local database. To set/reset its development login, put the same Admin email and a unique password of at least 12 characters in `backend/.env` as `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`, then run `npm run prisma:seed` from `backend/`. The seed upserts only that account and does not create sample users or documents. Public registration creates SUBMITTER accounts; an administrator can assign APPROVER or ADMIN roles through User Management.
+
+```env
+SEED_ADMIN_EMAIL="your-admin-email@example.com"
+SEED_ADMIN_NAME="Local Administrator"
+SEED_ADMIN_PASSWORD="your-own-unique-password-of-12-or-more-characters"
+```
+
+Sign in at the regular Login page with the configured email and password. The seed never prints the password.
 
 ## User Roles and Permissions
 
@@ -324,7 +332,7 @@ Register a new user account (defaults to Submitter role)
 ```json
 {
   "email": "user@example.com",
-  "password": "password123",
+  "password": "your-local-password",
   "name": "John Doe"
 }
 ```
@@ -347,7 +355,7 @@ Authenticate and receive access token
 ```json
 {
   "email": "user@example.com",
-  "password": "password123"
+  "password": "your-local-password"
 }
 ```
 
@@ -1041,6 +1049,14 @@ cd frontend
 npm run test:e2e
 ```
 
+Backend validation and workflow rule tests:
+
+```bash
+cd backend
+npm test
+npm run build
+```
+
 ### Test Coverage
 
 The test suite covers:
@@ -1172,11 +1188,11 @@ npm run preview
 
 ## Current implementation notes (2026-10-16)
 
-- Configure workflow stages with active approver assignments in the Admin Workflow page. Every approver assigned to a stage must approve before the next stage activates. A rejection or return ends that revision. Resubmission creates a new workflow revision and keeps the old decisions.
+- Configure workflow stages with active approver assignments in the Admin Workflow page. Every approver assigned to a stage must approve before the next stage activates. A rejection or return ends that revision. Resubmission creates a new workflow revision and keeps the old decisions. Unused workflow configurations can be edited; workflows already used by documents are immutable, so create a new workflow for future submissions.
 - The schema-only baseline is `backend/prisma/migrations/20261015000000_baseline`; the stage assignment migration is `backend/prisma/migrations/20261016000000_stage_approver_assignments`. Fresh databases can run `npx prisma migrate deploy`. For a pre-existing database with the prior schema, first mark the baseline applied with `npx prisma migrate resolve --applied 20261015000000_baseline`, then run `npx prisma migrate deploy`. The configured local database has been baselined and both migrations verified.
 - The seed is non-destructive and only ensures an administrator. Copy `backend/.env.example` to `.env`, set unique secrets and `SEED_ADMIN_EMAIL`, `SEED_ADMIN_NAME`, and `SEED_ADMIN_PASSWORD`, then run `npm run prisma:seed`. It will update that email to the configured administrator role and password; it does not create demo users or sample documents.
 - Create Submitter and Approver accounts through public registration (SUBMITTER by default), then have the administrator assign APPROVER using User Management. No demo passwords are provided.
-- The backend tests currently cover validation and role-field stripping. Database-backed integration coverage still needs to be added and run against an isolated test database.
+- Backend unit tests cover registration role stripping, workflow configuration validation, current-task authorization, sequential stage advancement, final approval, rejection, and return rules. Database-backed API integration coverage still needs to be added and run against an isolated test database. Browser tests require Playwright Chromium and `E2E_ADMIN_*`, `E2E_SUBMITTER_*`, or `E2E_APPROVER_*` credentials; set `E2E_ALLOW_DATABASE_WRITES=true` only when the backend points at an isolated test database.
 
 ## Future Improvements
 
