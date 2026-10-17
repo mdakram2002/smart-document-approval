@@ -12,6 +12,7 @@ A full-stack web application for managing document approval workflows with role-
 - [Prerequisites](#prerequisites)
 - [Installation and Setup](#installation-and-setup)
 - [Environment Configuration](#environment-configuration)
+- [Production Deployment](#production-deployment)
 - [Database Setup](#database-setup)
 - [Seed Data and Demo Credentials](#seed-data-and-demo-credentials)
 - [User Roles and Permissions](#user-roles-and-permissions)
@@ -210,6 +211,63 @@ Copy `frontend/.env.example` to `frontend/.env` and configure:
 VITE_API_URL=http://localhost:5000/api
 ```
 
+## Production Deployment
+
+The deployed application uses Vercel for the frontend, Render for the Express API, and Neon for PostgreSQL:
+
+- **Frontend:** [https://smart-document-approval.vercel.app/](https://smart-document-approval.vercel.app/)
+- **Backend health check:** [https://smart-document-approval.onrender.com/health](https://smart-document-approval.onrender.com/health)
+- **Database:** Neon PostgreSQL, connected privately from the backend through `DATABASE_URL`
+
+### Render backend
+
+Configure the Render service with **Root Directory** `backend`, **Build Command** `npm ci && npx prisma generate && npm run build`, and **Start Command** `npx prisma migrate deploy && npm start`. The migrations run on startup before the API starts.
+
+Add these variables in the Render service's Environment settings:
+
+| Variable | Production value |
+|---|---|
+| `DATABASE_URL` | Neon PostgreSQL connection string, beginning with `postgresql://` or `postgres://` |
+| `NODE_ENV` | `production` |
+| `FRONTEND_URL` | `https://smart-document-approval.vercel.app` |
+| `CORS_ORIGIN` | `https://smart-document-approval.vercel.app` |
+| `JWT_ACCESS_SECRET` | Unique random secret of at least 32 characters |
+| `JWT_REFRESH_SECRET` | A different unique random secret of at least 32 characters |
+| `ACCESS_TOKEN_EXPIRES_IN` | `15m` |
+| `REFRESH_TOKEN_EXPIRES_IN` | `7d` |
+
+Copy the connection string from Neon and keep it in Render only. Include Neon's `sslmode=require` setting, and enter only the URL as the `DATABASE_URL` value (without quotes or a `DATABASE_URL=` prefix). Do not commit production credentials or put them in Vercel variables. Render provides `PORT` automatically.
+
+### Vercel frontend
+
+Set the Vercel project's **Root Directory** to `frontend`, framework preset to **Vite**, build command to `npm run build`, and output directory to `dist`. Add this Production environment variable:
+
+```env
+VITE_API_URL=https://smart-document-approval.onrender.com/api
+```
+
+Redeploy Vercel after changing `VITE_API_URL`; Vite includes the value in the generated frontend. The browser sends API requests to Render, and Render's `CORS_ORIGIN` must match the Vercel origin exactly.
+
+### Seed the production Admin
+
+Public registration creates Submitter accounts. To create the initial Admin in the Neon database used by Render, add these variables to the Render backend service:
+
+```env
+SEED_ADMIN_EMAIL=your-admin-email@example.com
+SEED_ADMIN_NAME=Your Admin Name
+SEED_ADMIN_PASSWORD=your-unique-password-of-at-least-12-characters
+```
+
+After deployment and successful migrations, open the Render service Shell and run:
+
+```bash
+npm run prisma:seed
+```
+
+Run the command from the backend service directory. It uses Render's `DATABASE_URL` and creates or updates only the Admin identified by `SEED_ADMIN_EMAIL`. Sign in at the Vercel site's Login page with that email and password. Keep the password secret. Seeding a local database does not create an Admin in production Neon.
+
+Check that [the Render health endpoint](https://smart-document-approval.onrender.com/health) returns JSON containing `"status":"ok"` after deployment. For the full dashboard setup and local development instructions, see [SETUP.md](SETUP.md).
+
 ## Database Setup
 
 ### 1. Create PostgreSQL Database
@@ -245,7 +303,7 @@ npm run prisma:seed
 
 ## Seed Data and Administrator Setup
 
-One active Admin account already exists in the configured local database. To set/reset its development login, put the same Admin email and a unique password of at least 12 characters in `backend/.env` as `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`, then run `npm run prisma:seed` from `backend/`. The seed upserts only that account and does not create sample users or documents. Public registration creates SUBMITTER accounts; an administrator can assign APPROVER or ADMIN roles through User Management.
+To create or reset an Admin in the configured local database, set `SEED_ADMIN_EMAIL`, `SEED_ADMIN_NAME`, and a unique password of at least 12 characters in `backend/.env`, then run `npm run prisma:seed` from `backend/`. The seed upserts only that account and does not create sample users or documents. Public registration creates SUBMITTER accounts; an administrator can assign APPROVER or ADMIN roles through User Management. For the production Neon database, configure the same variables in Render and run the seed command in the Render service Shell as described above.
 
 ```env
 SEED_ADMIN_EMAIL="your-admin-email@example.com"

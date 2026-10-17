@@ -1,5 +1,60 @@
 # Local setup
 
+## Production deployment
+
+The production frontend is hosted on Vercel, the API on Render, and the PostgreSQL database on Neon:
+
+- Frontend: [https://smart-document-approval.vercel.app/](https://smart-document-approval.vercel.app/)
+- Backend health check: [https://smart-document-approval.onrender.com/health](https://smart-document-approval.onrender.com/health)
+- Database: Neon PostgreSQL (the connection string is private and must only be configured on Render)
+
+### Connect the services
+
+1. In Neon, open the project and copy its PostgreSQL connection string. Use the connection string shown by Neon (including `sslmode=require`); it should begin with `postgresql://` or `postgres://`.
+2. In the Render backend service, set **Root Directory** to `backend`, **Build Command** to `npm ci && npx prisma generate && npm run build`, and **Start Command** to `npx prisma migrate deploy && npm start`.
+3. Add these environment variables to the Render backend service:
+
+   | Variable | Value |
+   |---|---|
+   | `DATABASE_URL` | Neon PostgreSQL connection string |
+   | `NODE_ENV` | `production` |
+   | `FRONTEND_URL` | `https://smart-document-approval.vercel.app` |
+   | `CORS_ORIGIN` | `https://smart-document-approval.vercel.app` |
+   | `JWT_ACCESS_SECRET` | A unique random secret of at least 32 characters |
+   | `JWT_REFRESH_SECRET` | A different unique random secret of at least 32 characters |
+   | `ACCESS_TOKEN_EXPIRES_IN` | `15m` |
+   | `REFRESH_TOKEN_EXPIRES_IN` | `7d` |
+
+   Render supplies `PORT` automatically. Enter the Neon URL as the variable value only; do not include quotes or the `DATABASE_URL=` prefix. Never put the Neon URL or JWT secrets in the frontend or commit them to Git. Saving the environment variables and deploying starts the migrations before the API.
+4. In Vercel, set the project **Root Directory** to `frontend`, use the Vite framework preset, build command `npm run build`, and output directory `dist`. Add this environment variable for Production:
+
+   | Variable | Value |
+   |---|---|
+   | `VITE_API_URL` | `https://smart-document-approval.onrender.com/api` |
+
+   Redeploy the Vercel project after adding or changing this variable; Vite embeds it in the frontend build.
+5. Confirm the backend is live by opening [https://smart-document-approval.onrender.com/health](https://smart-document-approval.onrender.com/health). It should return JSON containing `"status":"ok"`. Then open the Vercel site and register or sign in.
+
+### Create the production Admin
+
+Public registration creates Submitter accounts. To create the initial Admin in the **Neon database used by Render**, add these variables to the Render backend service:
+
+| Variable | Value |
+|---|---|
+| `SEED_ADMIN_EMAIL` | The Admin login email you choose |
+| `SEED_ADMIN_NAME` | The Admin's display name |
+| `SEED_ADMIN_PASSWORD` | A unique password with at least 12 characters |
+
+After the Render service has deployed and migrations have completed, open its Shell and run this command from the backend service directory:
+
+```bash
+npm run prisma:seed
+```
+
+The seed creates or updates only the Admin account in the database named by Render's `DATABASE_URL`. Log in at the Vercel site's regular Login page using `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`. Keep the password private. Do not use a local development Admin account's credentials unless you seeded that same account into the production Neon database.
+
+The backend currently stores uploaded attachments on its local filesystem. Render's filesystem is ephemeral by default, so uploads may be lost on restart or redeploy. Use persistent file storage for production attachments.
+
 ## Requirements
 
 - Node.js 20 or later and npm
